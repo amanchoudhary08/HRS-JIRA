@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -26,6 +27,7 @@ type app struct {
 	db        *sql.DB
 	jwtSecret []byte
 	logger    *slog.Logger
+	broker    *eventBroker
 }
 
 type ctxKey string
@@ -67,6 +69,55 @@ type projectDetail struct {
 
 type validationError map[string]string
 
+type sseEvent struct {
+	Type string
+	Data any
+}
+
+type eventBroker struct {
+	mu      sync.Mutex
+	clients map[string]map[chan sseEvent]struct{}
+}
+
+func newBroker() *eventBroker {
+	return &eventBroker{clients: make(map[string]map[chan sseEvent]struct{})}
+}
+
+func (b *eventBroker) subscribe(projectID string) chan sseEvent {
+	ch := make(chan sseEvent, 16)
+	b.mu.Lock()
+	if b.clients[projectID] == nil {
+		b.clients[projectID] = make(map[chan sseEvent]struct{})
+	}
+	b.clients[projectID][ch] = struct{}{}
+	b.mu.Unlock()
+	return ch
+}
+
+func (b *eventBroker) unsubscribe(projectID string, ch chan sseEvent) {
+	b.mu.Lock()
+	if subs, ok := b.clients[projectID]; ok {
+		delete(subs, ch)
+	}
+	b.mu.Unlock()
+}
+
+func (b *eventBroker) publish(projectID string, ev sseEvent) {
+	b.mu.Lock()
+	subs := b.clients[projectID]
+	channels := make([]chan sseEvent, 0, len(subs))
+	for ch := range subs {
+		channels = append(channels, ch)
+	}
+	b.mu.Unlock()
+	for _, ch := range channels {
+		select {
+		case ch <- ev:
+		default:
+		}
+	}
+}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	dsn := env("DATABASE_URL", "postgres://taskflow:taskflow@localhost:5432/taskflow?sslmode=disable")
@@ -99,7 +150,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	api := &app{db: db, jwtSecret: []byte(secret), logger: logger}
+	api := &app{db: db, jwtSecret: []byte(secret), logger: logger, broker: newBroker()}
 	mux := http.NewServeMux()
 	api.routes(mux)
 
@@ -143,6 +194,7 @@ func (a *app) routes(mux *http.ServeMux) {
 	mux.Handle("GET /projects/{id}/tasks", a.auth(http.HandlerFunc(a.listTasks)))
 	mux.Handle("POST /projects/{id}/tasks", a.auth(http.HandlerFunc(a.createTask)))
 	mux.Handle("GET /projects/{id}/stats", a.auth(http.HandlerFunc(a.projectStats)))
+	mux.HandleFunc("GET /projects/{id}/events", a.projectEvents)
 	mux.Handle("PATCH /tasks/{id}", a.auth(http.HandlerFunc(a.updateTask)))
 	mux.Handle("DELETE /tasks/{id}", a.auth(http.HandlerFunc(a.deleteTask)))
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
@@ -440,6 +492,7 @@ func (a *app) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, t)
+	a.broker.publish(projectID, sseEvent{Type: "task_created", Data: t})
 }
 
 func (a *app) updateTask(w http.ResponseWriter, r *http.Request) {
@@ -515,6 +568,7 @@ func (a *app) updateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, t)
+	a.broker.publish(t.ProjectID, sseEvent{Type: "task_updated", Data: t})
 }
 
 func (a *app) deleteTask(w http.ResponseWriter, r *http.Request) {
@@ -533,6 +587,7 @@ func (a *app) deleteTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
+	a.broker.publish(t.ProjectID, sseEvent{Type: "task_deleted", Data: map[string]string{"id": id, "project_id": t.ProjectID}})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -578,6 +633,89 @@ func (a *app) projectStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"by_status": byStatus, "by_assignee": assignees})
+}
+
+func (a *app) verifyToken(tokenStr string) (authUser, error) {
+	tok, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return a.jwtSecret, nil
+	})
+	if err != nil || !tok.Valid {
+		return authUser{}, fmt.Errorf("invalid token")
+	}
+	claims, ok := tok.Claims.(jwt.MapClaims)
+	if !ok {
+		return authUser{}, fmt.Errorf("invalid claims")
+	}
+	id, _ := claims["user_id"].(string)
+	email, _ := claims["email"].(string)
+	if !validUUID(id) || email == "" {
+		return authUser{}, fmt.Errorf("invalid claims")
+	}
+	var u authUser
+	if err := a.db.QueryRowContext(context.Background(), `SELECT id, name, email FROM users WHERE id = $1 AND email = $2`, id, email).Scan(&u.ID, &u.Name, &u.Email); err != nil {
+		return authUser{}, fmt.Errorf("user not found")
+	}
+	return u, nil
+}
+
+func (a *app) projectEvents(w http.ResponseWriter, r *http.Request) {
+	tokenStr := r.URL.Query().Get("token")
+	if tokenStr == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	u, err := a.verifyToken(tokenStr)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	projectID := r.PathValue("id")
+	if !a.canAccessProject(r.Context(), projectID, u.ID) {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Time{})
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	ch := a.broker.subscribe(projectID)
+	defer a.broker.unsubscribe(projectID, ch)
+
+	fmt.Fprintf(w, ": connected\n\n")
+	_ = rc.Flush()
+
+	ticker := time.NewTicker(25 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case ev := <-ch:
+			b, err := json.Marshal(ev.Data)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, b)
+			if err := rc.Flush(); err != nil {
+				return
+			}
+		case <-ticker.C:
+			fmt.Fprintf(w, ": keepalive\n\n")
+			if err := rc.Flush(); err != nil {
+				return
+			}
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 func (a *app) issueToken(u authUser) (string, error) {

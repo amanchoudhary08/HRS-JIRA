@@ -29,6 +29,7 @@ Intentional tradeoffs:
 
 - **Dark mode** — Toggle button in the navbar (moon/sun icon). Preference is persisted to `localStorage` and applied immediately via a `.dark` class on `<html>`. Both light and dark themes are fully styled.
 - **Stats endpoint** — `GET /projects/:id/stats` returns task counts grouped by status and by assignee.
+- **Real-time updates via SSE** — `GET /projects/:id/events` streams Server-Sent Events to the project detail view. The backend holds an in-process broker (per-project pub/sub channels, goroutine-safe). After every task create, update, or delete the broker pushes the event to all subscribers. The frontend opens an `EventSource` when a project is opened, applies incoming events to state using functional updates (deduplication included), and shows a "● Live" / "○ Connecting" badge in the toolbar. Because `EventSource` cannot send custom headers, the JWT is passed as a `?token=` query parameter and validated in the SSE handler independently of the regular `auth` middleware.
 
 ## Running Locally
 
@@ -102,7 +103,10 @@ Error responses:
 Response `201`:
 
 ```json
-{ "token": "<jwt>", "user": { "id": "uuid", "name": "Jane Doe", "email": "jane@example.com" } }
+{
+  "token": "<jwt>",
+  "user": { "id": "uuid", "name": "Jane Doe", "email": "jane@example.com" }
+}
 ```
 
 `POST /auth/login`
@@ -114,7 +118,10 @@ Response `201`:
 Response `200`:
 
 ```json
-{ "token": "<jwt>", "user": { "id": "uuid", "name": "Test User", "email": "test@example.com" } }
+{
+  "token": "<jwt>",
+  "user": { "id": "uuid", "name": "Test User", "email": "test@example.com" }
+}
 ```
 
 ### Users
@@ -124,7 +131,9 @@ Response `200`:
 Response `200`:
 
 ```json
-{ "users": [{ "id": "uuid", "name": "Test User", "email": "test@example.com" }] }
+{
+  "users": [{ "id": "uuid", "name": "Test User", "email": "test@example.com" }]
+}
 ```
 
 ### Projects
@@ -134,7 +143,17 @@ Response `200`:
 Response `200`:
 
 ```json
-{ "projects": [{ "id": "uuid", "name": "Website Redesign", "description": "Seed project for reviewing TaskFlow", "owner_id": "uuid", "created_at": "2026-04-12T10:00:00Z" }] }
+{
+  "projects": [
+    {
+      "id": "uuid",
+      "name": "Website Redesign",
+      "description": "Seed project for reviewing TaskFlow",
+      "owner_id": "uuid",
+      "created_at": "2026-04-12T10:00:00Z"
+    }
+  ]
+}
 ```
 
 `POST /projects`
@@ -190,13 +209,35 @@ Response `200`:
 Response `200`:
 
 ```json
-{ "tasks": [{ "id": "uuid", "title": "Design homepage", "status": "todo", "priority": "high", "project_id": "uuid", "assignee_id": "uuid", "created_by": "uuid", "due_date": "2026-04-15", "created_at": "2026-04-12T10:00:00Z", "updated_at": "2026-04-12T10:00:00Z" }] }
+{
+  "tasks": [
+    {
+      "id": "uuid",
+      "title": "Design homepage",
+      "status": "todo",
+      "priority": "high",
+      "project_id": "uuid",
+      "assignee_id": "uuid",
+      "created_by": "uuid",
+      "due_date": "2026-04-15",
+      "created_at": "2026-04-12T10:00:00Z",
+      "updated_at": "2026-04-12T10:00:00Z"
+    }
+  ]
+}
 ```
 
 `POST /projects/:id/tasks`
 
 ```json
-{ "title": "Design homepage", "description": "First pass", "status": "todo", "priority": "high", "assignee_id": "uuid", "due_date": "2026-04-15" }
+{
+  "title": "Design homepage",
+  "description": "First pass",
+  "status": "todo",
+  "priority": "high",
+  "assignee_id": "uuid",
+  "due_date": "2026-04-15"
+}
 ```
 
 Response `201`: created task object.
@@ -204,7 +245,13 @@ Response `201`: created task object.
 `PATCH /tasks/:id`
 
 ```json
-{ "title": "Updated title", "status": "done", "priority": "low", "assignee_id": "", "due_date": "" }
+{
+  "title": "Updated title",
+  "status": "done",
+  "priority": "low",
+  "assignee_id": "",
+  "due_date": ""
+}
 ```
 
 Response `200`: updated task object.
@@ -220,4 +267,4 @@ Response `204`.
 - Add a stricter assignee membership model instead of allowing assignment to any user in the system.
 - Add refresh tokens and token rotation for a production auth model.
 - Add drag-and-drop between status columns (the kanban board structure is already in place; adding `@dnd-kit/core` would be the next step).
-- Add real-time task updates via Server-Sent Events so collaborators see changes without refreshing.
+- Move SSE auth to a cookie or header proxy to avoid leaking the JWT in server access logs (a known tradeoff with the `EventSource` API's lack of header support).

@@ -20,7 +20,9 @@ import {
 import "./main.css";
 
 function useDarkMode(): [boolean, () => void] {
-  const [dark, setDark] = useState(() => localStorage.getItem("taskflow_dark") === "true");
+  const [dark, setDark] = useState(
+    () => localStorage.getItem("taskflow_dark") === "true",
+  );
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -54,6 +56,11 @@ type Task = {
   created_at: string;
   updated_at: string;
 };
+
+type SSETaskEvent =
+  | { type: "task_created"; data: Task }
+  | { type: "task_updated"; data: Task }
+  | { type: "task_deleted"; data: { id: string; project_id: string } };
 
 type AuthContextValue = {
   token: string | null;
@@ -395,6 +402,45 @@ function ProjectsPage({
   );
 }
 
+function useProjectEvents(
+  projectId: string | undefined,
+  token: string | null,
+  onEvent: (e: SSETaskEvent) => void,
+): boolean {
+  const [connected, setConnected] = useState(false);
+  const onEventRef = React.useRef(onEvent);
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
+
+  useEffect(() => {
+    if (!projectId || !token) return;
+    const url = `${API_URL}/projects/${projectId}/events?token=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
+    es.onopen = () => setConnected(true);
+    es.onerror = () => setConnected(false);
+    const handle = (type: SSETaskEvent["type"]) => (e: Event) => {
+      try {
+        onEventRef.current({
+          type,
+          data: JSON.parse((e as MessageEvent).data),
+        } as SSETaskEvent);
+      } catch (_e) {
+        // ignore malformed events
+      }
+    };
+    es.addEventListener("task_created", handle("task_created"));
+    es.addEventListener("task_updated", handle("task_updated"));
+    es.addEventListener("task_deleted", handle("task_deleted"));
+    return () => {
+      es.close();
+      setConnected(false);
+    };
+  }, [projectId, token]);
+
+  return connected;
+}
+
 function ProjectDetailPage({
   onToggleDark,
   dark,
@@ -419,6 +465,20 @@ function ProjectDetailPage({
   const [projectDescription, setProjectDescription] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+
+  const sseConnected = useProjectEvents(id, token, (event) => {
+    if (event.type === "task_created") {
+      setTasks((prev) =>
+        prev.some((t) => t.id === event.data.id) ? prev : [event.data, ...prev],
+      );
+    } else if (event.type === "task_updated") {
+      setTasks((prev) =>
+        prev.map((t) => (t.id === event.data.id ? event.data : t)),
+      );
+    } else if (event.type === "task_deleted") {
+      setTasks((prev) => prev.filter((t) => t.id !== event.data.id));
+    }
+  });
 
   async function load() {
     setLoading(true);
@@ -582,6 +642,16 @@ function ProjectDetailPage({
                 </p>
               </div>
               <div className="row">
+                <span
+                  className={`live-badge${sseConnected ? " live-badge--on" : ""}`}
+                  title={
+                    sseConnected
+                      ? "Receiving real-time updates"
+                      : "Connecting to live updates..."
+                  }
+                >
+                  {sseConnected ? "● Live" : "○ Connecting"}
+                </span>
                 {project.owner_id === user?.id && (
                   <>
                     <button
@@ -907,7 +977,18 @@ function EyeOffIcon() {
 
 function MoonIcon() {
   return (
-    <svg aria-hidden="true" fill="none" height="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="20"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </svg>
   );
@@ -915,7 +996,18 @@ function MoonIcon() {
 
 function SunIcon() {
   return (
-    <svg aria-hidden="true" fill="none" height="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="20"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <circle cx="12" cy="12" r="5" />
       <line x1="12" x2="12" y1="1" y2="3" />
       <line x1="12" x2="12" y1="21" y2="23" />
