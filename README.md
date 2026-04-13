@@ -16,7 +16,7 @@ The backend is intentionally explicit and small. It uses `database/sql` rather t
 
 The API keeps auth separate from project/task handlers with middleware that validates `Authorization: Bearer <token>`, checks expiry through JWT claims, and loads the current user from the database. Project access follows the assignment rule: a user can list or view projects they own or have tasks assigned in. Mutating project metadata and deleting projects are owner-only. Task deletion is limited to the project owner or the task creator; task updates also allow the assignee so assigned users can move work through the board.
 
-The frontend uses custom components instead of a component library to keep dependencies low and styling easy to inspect. Auth state is persisted in `localStorage`, protected routes redirect to `/login`, and the task status dropdown updates immediately before reverting on API failure.
+The frontend uses a **custom component library** (no external UI library) — all buttons, fields, cards, pills, modals, and layout primitives are hand-written CSS classes in `main.css`. This was an intentional choice to keep the bundle minimal and make every styling decision reviewable without a dependency tree. Auth state is persisted in `localStorage`, protected routes redirect to `/login`, and the task status dropdown updates immediately before reverting on API failure.
 
 Intentional tradeoffs:
 
@@ -24,6 +24,11 @@ Intentional tradeoffs:
 - No refresh tokens. Access tokens expire after 24 hours as requested.
 - No drag-and-drop. The status dropdown covers the core status-change workflow with less failure surface.
 - A small `GET /users` endpoint was added so the UI can assign tasks to other seeded or registered users.
+
+## Bonus Features Implemented
+
+- **Dark mode** — Toggle button in the navbar (moon/sun icon). Preference is persisted to `localStorage` and applied immediately via a `.dark` class on `<html>`. Both light and dark themes are fully styled.
+- **Stats endpoint** — `GET /projects/:id/stats` returns task counts grouped by status and by assignee.
 
 ## Running Locally
 
@@ -214,4 +219,5 @@ Response `204`.
 - Add pagination to `/projects` and task list endpoints once realistic data volume exists.
 - Add a stricter assignee membership model instead of allowing assignment to any user in the system.
 - Add refresh tokens and token rotation for a production auth model.
-- Add drag-and-drop between status columns after the API contract is stable.
+- Add drag-and-drop between status columns (the kanban board structure is already in place; adding `@dnd-kit/core` would be the next step).
+- Add real-time task updates via Server-Sent Events so collaborators see changes without refreshing.
