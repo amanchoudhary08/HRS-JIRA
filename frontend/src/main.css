@@ -152,6 +152,20 @@ button {
   display: grid;
   align-content: start;
   gap: 12px;
+  border-radius: 8px;
+  padding: 8px;
+  transition: background 0.15s;
+}
+.column--drag-over {
+  background: var(--pill-bg);
+  outline: 2px dashed var(--brand);
+}
+.task-card[draggable] {
+  cursor: grab;
+}
+.task-card[draggable]:active {
+  cursor: grabbing;
+  opacity: 0.7;
 }
 .column h3 {
   margin: 0;
@@ -422,4 +436,19 @@ button {
     width: min(100% - 24px, 1120px);
     padding-top: 22px;
   }
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+.pagination-info {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  min-width: 110px;
+  text-align: center;
 }

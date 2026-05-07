@@ -1,16 +1,14 @@
-FROM golang:1.22-alpine AS build
+FROM maven:3.9-eclipse-temurin-25-alpine AS build
 WORKDIR /app
-RUN apk add --no-cache git
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /taskflow-api ./cmd/api
+COPY pom.xml .
+RUN mvn dependency:go-offline -q
+COPY src ./src
+RUN mvn package -DskipTests -q
 
-FROM alpine:3.20
+FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 RUN adduser -D -H appuser
-COPY --from=build /taskflow-api /usr/local/bin/taskflow-api
-COPY migrations ./migrations
+COPY --from=build /app/target/taskflow-api-0.0.1-SNAPSHOT.jar app.jar
 USER appuser
 EXPOSE 4000
-CMD ["taskflow-api"]
+ENTRYPOINT ["java", "-jar", "app.jar"]

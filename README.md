@@ -22,7 +22,8 @@ Intentional tradeoffs:
 
 - No ORM or repository abstraction layer. With this scope, handler-level SQL is readable and avoids ceremony.
 - No refresh tokens. Access tokens expire after 24 hours as requested.
-- No drag-and-drop. The status dropdown covers the core status-change workflow with less failure surface.
+- Drag-and-drop is implemented using the native HTML5 Drag-and-Drop API rather than a library (`@dnd-kit/core` etc.) to keep the bundle small. It covers the core column-to-column status change; reordering within a column is not implemented.
+- Pagination uses page/offset rather than cursor-based pagination. Cursor-based would be more robust under concurrent inserts but adds complexity that isn't warranted at this scale.
 - A small `GET /users` endpoint was added so the UI can assign tasks to other seeded or registered users.
 
 ## Bonus Features Implemented
@@ -30,6 +31,9 @@ Intentional tradeoffs:
 - **Dark mode** — Toggle button in the navbar (moon/sun icon). Preference is persisted to `localStorage` and applied immediately via a `.dark` class on `<html>`. Both light and dark themes are fully styled.
 - **Stats endpoint** — `GET /projects/:id/stats` returns task counts grouped by status and by assignee.
 - **Real-time updates via SSE** — `GET /projects/:id/events` streams Server-Sent Events to the project detail view. The backend holds an in-process broker (per-project pub/sub channels, goroutine-safe). After every task create, update, or delete the broker pushes the event to all subscribers. The frontend opens an `EventSource` when a project is opened, applies incoming events to state using functional updates (deduplication included), and shows a "● Live" / "○ Connecting" badge in the toolbar. Because `EventSource` cannot send custom headers, the JWT is passed as a `?token=` query parameter and validated in the SSE handler independently of the regular `auth` middleware.
+- **Pagination** — `GET /projects` and `GET /projects/:id/tasks` both accept `?page=&limit=` (default limit 20, max 100). Responses include `page`, `limit`, and `total`. The frontend renders Prev/Next controls when there is more than one page.
+- **Drag-and-drop** — Task cards on the project detail kanban board are draggable. Dropping a card onto a different status column triggers an optimistic status update (reverts on API error). Implemented with the HTML5 Drag-and-Drop API — no additional dependency.
+- **Integration tests** — `backend/cmd/api/main_test.go` contains 6 integration test functions covering register/login, duplicate email rejection, unauthenticated access, project + task lifecycle, owner-only enforcement, and validation errors. Tests run against a real PostgreSQL database pointed to by `TEST_DATABASE_URL`; they are skipped automatically when that variable is not set.
 
 ## Running Locally
 
@@ -144,15 +148,10 @@ Response `200`:
 
 ```json
 {
-  "projects": [
-    {
-      "id": "uuid",
-      "name": "Website Redesign",
-      "description": "Seed project for reviewing TaskFlow",
-      "owner_id": "uuid",
-      "created_at": "2026-04-12T10:00:00Z"
-    }
-  ]
+  "projects": [...],
+  "page": 1,
+  "limit": 20,
+  "total": 5
 }
 ```
 
@@ -262,9 +261,10 @@ Response `204`.
 
 ## What I'd Do With More Time
 
-- Add integration tests around auth, project access control, and task mutation permissions.
-- Add pagination to `/projects` and task list endpoints once realistic data volume exists.
-- Add a stricter assignee membership model instead of allowing assignment to any user in the system.
+- Expand the integration test suite to cover SSE events, stats endpoint, and pagination edge cases.
+- Add a stricter assignee membership model instead of allowing assignment to any user in the system (e.g. project membership table).
 - Add refresh tokens and token rotation for a production auth model.
-- Add drag-and-drop between status columns (the kanban board structure is already in place; adding `@dnd-kit/core` would be the next step).
 - Move SSE auth to a cookie or header proxy to avoid leaking the JWT in server access logs (a known tradeoff with the `EventSource` API's lack of header support).
+- Add optimistic drag-and-drop reordering within columns (currently drag-and-drop only moves tasks between status columns).
+- Add cursor-based pagination for the task list to avoid skipping items when tasks are created while a user is browsing pages.
+- Add E2E tests (Playwright) covering the full register → create project → add task → move task flow.

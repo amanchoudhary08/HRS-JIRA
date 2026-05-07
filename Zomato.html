@@ -1,0 +1,2713 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TaskFlow — Full Project Documentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ── Reset & tokens ─────────────────────────────────── */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      :root {
+        --bg: #f6f7f3;
+        --bg-card: #ffffff;
+        --bg-nav: #ffffff;
+        --bg-code: #f0f2ef;
+        --bg-pre: #1e2623;
+        --border: #dfe4dc;
+        --text: #1e2623;
+        --text-muted: #65706b;
+        --text-label: #313b36;
+        --brand: #1f5b45;
+        --brand-light: #e8efe7;
+        --brand-mid: #5bbf94;
+        --accent: #3d8c65;
+        --pill-bg: #e8efe7;
+        --pill-color: #275640;
+        --shadow-sm: 0 1px 3px rgba(35, 51, 45, 0.08);
+        --shadow: 0 4px 20px rgba(35, 51, 45, 0.1);
+        --shadow-lg: 0 10px 40px rgba(35, 51, 45, 0.14);
+        --radius: 10px;
+        --sidebar-w: 280px;
+        --font: "Inter", ui-sans-serif, system-ui, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, monospace;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.7;
+        font-size: 15px;
+      }
+
+      /* ── Sidebar ────────────────────────────────────────── */
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: var(--sidebar-w);
+        height: 100vh;
+        background: var(--bg-nav);
+        border-right: 1px solid var(--border);
+        overflow-y: auto;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .sidebar-brand {
+        padding: 22px 20px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .sidebar-brand h1 {
+        font-size: 1.25rem;
+        font-weight: 800;
+        color: var(--brand);
+      }
+
+      .sidebar-brand p {
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+
+      .sidebar-nav {
+        padding: 12px 0 32px;
+        flex: 1;
+      }
+
+      .nav-section {
+        padding: 10px 20px 4px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+      }
+
+      .sidebar-nav a {
+        display: block;
+        padding: 6px 20px;
+        font-size: 0.82rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        border-left: 3px solid transparent;
+        transition: all 0.15s;
+        line-height: 1.4;
+      }
+
+      .sidebar-nav a:hover {
+        color: var(--brand);
+        background: var(--brand-light);
+        border-left-color: var(--brand);
+      }
+
+      .sidebar-nav a.sub {
+        padding-left: 34px;
+        font-size: 0.78rem;
+      }
+
+      /* ── Main content ───────────────────────────────────── */
+      .main {
+        margin-left: var(--sidebar-w);
+        min-height: 100vh;
+      }
+
+      /* ── Hero ───────────────────────────────────────────── */
+      .hero {
+        background: linear-gradient(135deg, var(--brand) 0%, #2d7a5e 100%);
+        color: white;
+        padding: 64px 64px 56px;
+      }
+
+      .hero-badge {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.18);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 999px;
+        padding: 4px 14px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 20px;
+      }
+
+      .hero h1 {
+        font-size: 2.8rem;
+        font-weight: 800;
+        line-height: 1.15;
+        margin-bottom: 16px;
+      }
+
+      .hero p {
+        font-size: 1.1rem;
+        opacity: 0.88;
+        max-width: 560px;
+        margin-bottom: 28px;
+      }
+
+      .hero-stack {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tech-pill {
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 6px;
+        padding: 5px 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        font-family: var(--mono);
+      }
+
+      /* ── Content sections ───────────────────────────────── */
+      .content {
+        padding: 0 64px 80px;
+        max-width: 920px;
+      }
+
+      section {
+        margin-top: 60px;
+      }
+
+      section:first-child {
+        margin-top: 48px;
+      }
+
+      h2.section-title {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: var(--brand);
+        margin-bottom: 20px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid var(--brand-light);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      h2.section-title .num {
+        background: var(--brand);
+        color: white;
+        font-size: 0.75rem;
+        font-weight: 800;
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      h3.sub-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text);
+        margin: 32px 0 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      h3.sub-title::before {
+        content: "";
+        display: inline-block;
+        width: 4px;
+        height: 18px;
+        background: var(--brand);
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+
+      h4 {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--text-label);
+        margin: 20px 0 8px;
+      }
+
+      p {
+        margin-bottom: 12px;
+        color: var(--text);
+      }
+
+      ul,
+      ol {
+        padding-left: 22px;
+        margin-bottom: 12px;
+      }
+
+      li {
+        margin-bottom: 6px;
+      }
+
+      /* ── Code ───────────────────────────────────────────── */
+      code {
+        font-family: var(--mono);
+        font-size: 0.82em;
+        background: var(--bg-code);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 5px;
+        color: var(--brand);
+      }
+
+      pre {
+        background: var(--bg-pre);
+        border-radius: var(--radius);
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 16px 0;
+        box-shadow: var(--shadow);
+      }
+
+      pre code {
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        background: none;
+        border: none;
+        padding: 0;
+        color: #d4e4df;
+        line-height: 1.65;
+      }
+
+      /* ── Tables ─────────────────────────────────────────── */
+      .table-wrap {
+        overflow-x: auto;
+        margin: 16px 0;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-sm);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.87rem;
+      }
+
+      thead {
+        background: var(--brand);
+        color: white;
+      }
+
+      thead th {
+        padding: 11px 16px;
+        font-weight: 700;
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      tbody tr:nth-child(even) {
+        background: #f9faf8;
+      }
+
+      tbody tr:hover {
+        background: var(--brand-light);
+      }
+
+      td {
+        padding: 10px 16px;
+        border-top: 1px solid var(--border);
+        vertical-align: top;
+        line-height: 1.5;
+      }
+
+      td code {
+        white-space: nowrap;
+      }
+
+      /* ── Cards ──────────────────────────────────────────── */
+      .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 20px 24px;
+        margin: 16px 0;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 14px;
+        margin: 16px 0;
+      }
+
+      .card-item {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .card-item h4 {
+        margin-top: 0;
+        font-size: 0.82rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .card-item p {
+        margin: 4px 0 0;
+        font-weight: 700;
+        color: var(--brand);
+        font-size: 1rem;
+        font-family: var(--mono);
+      }
+
+      /* ── Feature list ───────────────────────────────────── */
+      .feature-list {
+        list-style: none;
+        padding: 0;
+        display: grid;
+        gap: 10px;
+        margin: 16px 0;
+      }
+
+      .feature-list li {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px 16px;
+        padding-left: 46px;
+        position: relative;
+        box-shadow: var(--shadow-sm);
+        margin: 0;
+      }
+
+      .feature-list li::before {
+        content: "✓";
+        position: absolute;
+        left: 16px;
+        top: 12px;
+        width: 22px;
+        height: 22px;
+        background: var(--brand);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 800;
+      }
+
+      /* ── Route pill ─────────────────────────────────────── */
+      .method {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        font-weight: 800;
+        border-radius: 4px;
+        padding: 2px 7px;
+        text-transform: uppercase;
+      }
+
+      .method.get {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
+
+      .method.post {
+        background: #e3f2fd;
+        color: #1565c0;
+      }
+
+      .method.patch {
+        background: #fff3e0;
+        color: #e65100;
+      }
+
+      .method.delete {
+        background: #fce4ec;
+        color: #b71c1c;
+      }
+
+      /* ── Flow diagram ───────────────────────────────────── */
+      .flow-box {
+        background: var(--bg-pre);
+        border-radius: var(--radius);
+        padding: 24px;
+        margin: 16px 0;
+        overflow-x: auto;
+      }
+
+      .flow-box pre {
+        background: none;
+        padding: 0;
+        margin: 0;
+        box-shadow: none;
+        color: #d4e4df;
+      }
+
+      /* ── Info callout ───────────────────────────────────── */
+      .callout {
+        border-left: 4px solid var(--brand);
+        background: var(--brand-light);
+        border-radius: 0 8px 8px 0;
+        padding: 14px 18px;
+        margin: 16px 0;
+        font-size: 0.9rem;
+      }
+
+      .callout strong {
+        color: var(--brand);
+      }
+
+      /* ── Security table rows ────────────────────────────── */
+      .sec-icon {
+        font-size: 1rem;
+        margin-right: 4px;
+      }
+
+      /* ── Arch diagram ───────────────────────────────────── */
+      .arch {
+        background: var(--bg-pre);
+        color: #d4e4df;
+        font-family: var(--mono);
+        font-size: 0.8rem;
+        line-height: 1.7;
+        border-radius: var(--radius);
+        padding: 24px;
+        margin: 16px 0;
+        overflow-x: auto;
+      }
+
+      /* ── Back to top ────────────────────────────────────── */
+      .back-top {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 12px;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 0.82rem;
+        transition: color 0.15s;
+      }
+
+      .back-top:hover {
+        color: var(--brand);
+      }
+
+      /* ── Step list ──────────────────────────────────────── */
+      .step-list {
+        counter-reset: step;
+        list-style: none;
+        padding: 0;
+      }
+
+      .step-list li {
+        counter-increment: step;
+        padding: 10px 14px 10px 48px;
+        position: relative;
+        margin-bottom: 6px;
+        background: var(--bg-card);
+        border-radius: 8px;
+        border: 1px solid var(--border);
+      }
+
+      .step-list li::before {
+        content: counter(step);
+        position: absolute;
+        left: 14px;
+        top: 10px;
+        width: 22px;
+        height: 22px;
+        background: var(--brand);
+        color: white;
+        border-radius: 50%;
+        font-size: 0.72rem;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* ── Env block ──────────────────────────────────────── */
+      .env-block {
+        background: #1a2420;
+        color: #a8c4bc;
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        border-radius: var(--radius);
+        padding: 20px 22px;
+        margin: 12px 0;
+      }
+
+      .env-block .comment {
+        color: #4a6862;
+      }
+
+      .env-block .key {
+        color: #6dd4a8;
+      }
+
+      .env-block .val {
+        color: #d4e4df;
+      }
+
+      /* ── Footer ─────────────────────────────────────────── */
+      footer {
+        border-top: 1px solid var(--border);
+        padding: 28px 64px;
+        margin-left: var(--sidebar-w);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.82rem;
+        color: var(--text-muted);
+      }
+
+      /* ── Responsive ─────────────────────────────────────── */
+      @media (max-width: 900px) {
+        .sidebar {
+          display: none;
+        }
+        .main,
+        footer {
+          margin-left: 0;
+        }
+        .hero,
+        .content {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+        .hero h1 {
+          font-size: 2rem;
+        }
+        footer {
+          padding: 20px 24px;
+          flex-direction: column;
+          gap: 8px;
+          text-align: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ── Sidebar ─────────────────────────────────────────── -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <h1>TaskFlow</h1>
+        <p>Full Project Documentation</p>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">Overview</div>
+        <a href="#overview">1. Project Overview</a>
+        <a href="#architecture">2. Architecture</a>
+        <a href="#layout">3. Repository Layout</a>
+
+        <div class="nav-section">Infrastructure</div>
+        <a href="#docker">4. Docker &amp; Infrastructure</a>
+        <a href="#docker-compose" class="sub">4.1 docker-compose.yml</a>
+        <a href="#backend-dockerfile" class="sub">4.2 Backend Dockerfile</a>
+        <a href="#frontend-dockerfile" class="sub">4.3 Frontend Dockerfile</a>
+
+        <div class="nav-section">Database</div>
+        <a href="#database">5. Database Layer</a>
+        <a href="#schema" class="sub">5.1 Schema</a>
+        <a href="#seed" class="sub">5.2 Seed Data</a>
+        <a href="#erd" class="sub">5.3 Relationships</a>
+
+        <div class="nav-section">Backend</div>
+        <a href="#backend">6. Go API</a>
+        <a href="#go-deps" class="sub">6.1 Dependencies</a>
+        <a href="#main-go" class="sub">6.2 main.go</a>
+        <a href="#models-go" class="sub">6.3 models.go</a>
+        <a href="#middleware" class="sub">6.4 middleware.go</a>
+        <a href="#handlers-auth" class="sub">6.5 handlers_auth.go</a>
+        <a href="#handlers-projects" class="sub">6.6 handlers_projects.go</a>
+        <a href="#handlers-tasks" class="sub">6.7 handlers_tasks.go</a>
+        <a href="#handlers-sse" class="sub">6.8 handlers_sse.go</a>
+        <a href="#broker" class="sub">6.9 broker.go</a>
+        <a href="#db-go" class="sub">6.10 db.go</a>
+        <a href="#helpers-go" class="sub">6.11 helpers.go</a>
+        <a href="#tests" class="sub">6.12 Tests</a>
+        <a href="#routes" class="sub">6.13 Route Table</a>
+        <a href="#auth-flow" class="sub">6.14 Auth Flow</a>
+        <a href="#authz" class="sub">6.15 Authorization</a>
+
+        <div class="nav-section">Frontend</div>
+        <a href="#frontend">7. React + TypeScript</a>
+        <a href="#fe-tech" class="sub">7.1 Tech Stack</a>
+        <a href="#index-html" class="sub">7.2 index.html</a>
+        <a href="#app-tsx" class="sub">7.3 App.tsx</a>
+        <a href="#main-css" class="sub">7.4 main.css</a>
+        <a href="#types-ts" class="sub">7.5 types.ts</a>
+        <a href="#client-ts" class="sub">7.6 api/client.ts</a>
+        <a href="#auth-context" class="sub">7.7 AuthContext</a>
+        <a href="#dark-mode" class="sub">7.8 useDarkMode</a>
+        <a href="#sse-hook" class="sub">7.9 useProjectEvents</a>
+        <a href="#layout-tsx" class="sub">7.10 Layout</a>
+        <a href="#protected" class="sub">7.11 Protected</a>
+        <a href="#field" class="sub">7.12 Field</a>
+        <a href="#icons" class="sub">7.13 icons</a>
+        <a href="#task-modal" class="sub">7.14 TaskModal</a>
+        <a href="#auth-page" class="sub">7.15 AuthPage</a>
+        <a href="#projects-page" class="sub">7.16 ProjectsPage</a>
+        <a href="#detail-page" class="sub">7.17 ProjectDetailPage</a>
+        <a href="#label-status" class="sub">7.18 labelStatus</a>
+
+        <div class="nav-section">Data &amp; Security</div>
+        <a href="#data-flow">8. Data Flow</a>
+        <a href="#security">9. Security Design</a>
+        <a href="#running">10. Running the Project</a>
+      </nav>
+    </aside>
+
+    <!-- ── Main ───────────────────────────────────────────── -->
+    <div class="main">
+      <!-- Hero -->
+      <div class="hero" id="top">
+        <div class="hero-badge">Full Technical Documentation</div>
+        <h1>TaskFlow</h1>
+        <p>
+          A full-stack collaborative project and task management application
+          with real-time updates via Server-Sent Events.
+        </p>
+        <div class="hero-stack">
+          <span class="tech-pill">Go 1.22</span>
+          <span class="tech-pill">PostgreSQL 16</span>
+          <span class="tech-pill">React 18</span>
+          <span class="tech-pill">TypeScript 5</span>
+          <span class="tech-pill">Vite 5</span>
+          <span class="tech-pill">Docker Compose</span>
+          <span class="tech-pill">SSE</span>
+          <span class="tech-pill">JWT</span>
+        </div>
+      </div>
+
+      <div class="content">
+        <!-- ── 1. Overview ───────────────────────────────── -->
+        <section id="overview">
+          <h2 class="section-title">
+            <span class="num">1</span> Project Overview
+          </h2>
+          <p>
+            TaskFlow is a collaborative project and task management tool. It
+            allows teams to organise work into projects and track individual
+            tasks through a Kanban-style board with drag-and-drop support and
+            live real-time updates.
+          </p>
+          <ul class="feature-list">
+            <li>
+              Register and log in with email/password (bcrypt hashed, JWT
+              sessions).
+            </li>
+            <li>
+              Create <strong>projects</strong> and invite collaboration by
+              assigning tasks.
+            </li>
+            <li>
+              Create <strong>tasks</strong> with title, description, status,
+              priority, assignee, and due date.
+            </li>
+            <li>
+              Drag tasks between Kanban columns (Todo → In Progress → Done).
+            </li>
+            <li>
+              Filter tasks by status and assignee with URL-persistent filters.
+            </li>
+            <li>
+              Real-time updates via <strong>Server-Sent Events</strong> — no
+              polling, no WebSockets.
+            </li>
+            <li>Dark mode that persists across sessions via localStorage.</li>
+            <li>Paginated project and task lists.</li>
+          </ul>
+        </section>
+
+        <!-- ── 2. Architecture ───────────────────────────── -->
+        <section id="architecture">
+          <h2 class="section-title">
+            <span class="num">2</span> Architecture Diagram
+          </h2>
+          <div class="arch">
+            <pre>
+Browser (React SPA)
+       │
+       │  REST JSON + SSE stream
+       ▼
+  ┌─────────┐
+  │  nginx  │  (serves built React files, port 3000)
+  └────┬────┘
+       │  frontend calls API directly (no proxy)
+       ▼
+  ┌───────────────────────────────┐
+  │  Go API Server  (port 4000)   │
+  │  ┌─────────────────────────┐  │
+  │  │ CORS → Log → JWT Auth   │  │
+  │  │ HTTP ServeMux (Go 1.22) │  │
+  │  └─────────────────────────┘  │
+  │  ┌─────────────────────────┐  │
+  │  │  eventBroker  (SSE)     │  │
+  │  └─────────────────────────┘  │
+  └───────────────┬───────────────┘
+                  │ database/sql
+                  ▼
+  ┌────────────────────────────────┐
+  │  PostgreSQL 16                 │
+  │  users · projects · tasks      │
+  │  goose migrations              │
+  └────────────────────────────────┘</pre
+            >
+          </div>
+          <ul>
+            <li>
+              The <strong>frontend</strong> is a fully static SPA served by
+              nginx after Docker build.
+            </li>
+            <li>
+              The <strong>backend</strong> is a single statically-compiled Go
+              binary — only stdlib <code>net/http</code> plus a small set of
+              dependencies.
+            </li>
+            <li>
+              All three services run as Docker containers orchestrated by Docker
+              Compose.
+            </li>
+          </ul>
+        </section>
+
+        <!-- ── 3. Layout ─────────────────────────────────── -->
+        <section id="layout">
+          <h2 class="section-title">
+            <span class="num">3</span> Repository Layout
+          </h2>
+          <pre><code>/
+├── docker-compose.yml          # Orchestrates db + api + frontend
+├── README.md
+├── DOCUMENTATION.md
+├── backend/
+│   ├── Dockerfile              # Multi-stage Go build → minimal alpine
+│   ├── go.mod
+│   ├── go.sum
+│   ├── cmd/api/
+│   │   ├── main.go             # Entry point, server, graceful shutdown
+│   │   ├── models.go           # Domain structs + context key
+│   │   ├── middleware.go       # JWT auth, CORS, logging
+│   │   ├── handlers_auth.go    # /auth/register, /auth/login, /users
+│   │   ├── handlers_projects.go# Project CRUD + stats
+│   │   ├── handlers_tasks.go   # Task CRUD
+│   │   ├── handlers_sse.go     # SSE stream + token auth
+│   │   ├── broker.go           # In-memory pub/sub
+│   │   ├── db.go               # DB query helpers
+│   │   ├── helpers.go          # JSON, validation, pagination utils
+│   │   └── main_test.go        # Integration tests
+│   └── migrations/
+│       ├── 000001_create_schema.sql
+│       └── 000002_seed_data.sql
+└── frontend/
+    ├── Dockerfile              # npm build → nginx serve
+    ├── index.html
+    ├── nginx.conf
+    ├── package.json
+    ├── vite.config.ts
+    └── src/
+        ├── App.tsx             # Root: dark mode, AuthProvider, Router
+        ├── main.css            # All styles + CSS design tokens
+        ├── types.ts            # Shared TS interfaces
+        ├── api/client.ts       # fetch wrapper
+        ├── context/AuthContext.tsx
+        ├── hooks/
+        │   ├── useDarkMode.ts
+        │   └── useProjectEvents.ts
+        ├── components/
+        │   ├── Layout.tsx
+        │   ├── Protected.tsx
+        │   ├── Field.tsx
+        │   ├── icons.tsx
+        │   └── TaskModal.tsx
+        ├── pages/
+        │   ├── AuthPage.tsx
+        │   ├── ProjectsPage.tsx
+        │   └── ProjectDetailPage.tsx
+        └── utils/labelStatus.ts</code></pre>
+        </section>
+
+        <!-- ── 4. Docker ──────────────────────────────────── -->
+        <section id="docker">
+          <h2 class="section-title">
+            <span class="num">4</span> Infrastructure &amp; Docker
+          </h2>
+
+          <h3 class="sub-title" id="docker-compose">docker-compose.yml</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Service</th>
+                  <th>Image/Build</th>
+                  <th>Port</th>
+                  <th>Purpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>db</code></td>
+                  <td><code>postgres:16-alpine</code></td>
+                  <td>5432</td>
+                  <td>PostgreSQL database</td>
+                </tr>
+                <tr>
+                  <td><code>api</code></td>
+                  <td><code>./backend</code> Dockerfile</td>
+                  <td>4000</td>
+                  <td>Go REST API</td>
+                </tr>
+                <tr>
+                  <td><code>frontend</code></td>
+                  <td><code>./frontend</code> Dockerfile</td>
+                  <td>3000</td>
+                  <td>Nginx serving built React</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li>
+              <strong>db healthcheck</strong>: <code>pg_isready</code> every 5
+              s, up to 10 retries. The <code>api</code> service uses
+              <code>depends_on: condition: service_healthy</code> so Go never
+              starts before Postgres.
+            </li>
+            <li>
+              <strong><code>JWT_SECRET</code></strong> has no default — Compose
+              fails startup if not set (<code>${JWT_SECRET:?...}</code>).
+            </li>
+            <li>
+              <strong><code>VITE_API_URL</code></strong> is passed as a Docker
+              build <code>ARG</code> so it's baked into the JS bundle at build
+              time.
+            </li>
+            <li>
+              <strong>Named volume</strong> <code>postgres_data</code> persists
+              DB across restarts. Only lost with
+              <code>docker compose down -v</code>.
+            </li>
+          </ul>
+
+          <h3 class="sub-title" id="backend-dockerfile">
+            Backend Dockerfile — Two-Stage Build
+          </h3>
+          <div class="card-grid">
+            <div class="card-item">
+              <h4>Stage 1: build</h4>
+              <p><code>golang:1.22-alpine</code></p>
+              <p
+                style="
+                  font-size: 0.85rem;
+                  color: var(--text-muted);
+                  font-family: var(--font);
+                  font-weight: 400;
+                  margin-top: 6px;
+                "
+              >
+                Compiles with <code>CGO_ENABLED=0 GOOS=linux</code> → static
+                binary. No libc needed.
+              </p>
+            </div>
+            <div class="card-item">
+              <h4>Stage 2: runtime</h4>
+              <p><code>alpine:3.20</code></p>
+              <p
+                style="
+                  font-size: 0.85rem;
+                  color: var(--text-muted);
+                  font-family: var(--font);
+                  font-weight: 400;
+                  margin-top: 6px;
+                "
+              >
+                Non-root <code>appuser</code>. Only binary +
+                <code>migrations/</code> copied. Port 4000.
+              </p>
+            </div>
+          </div>
+
+          <h3 class="sub-title" id="frontend-dockerfile">
+            Frontend Dockerfile — Two-Stage Build
+          </h3>
+          <div class="card-grid">
+            <div class="card-item">
+              <h4>Stage 1: build</h4>
+              <p><code>node:20-alpine</code></p>
+              <p
+                style="
+                  font-size: 0.85rem;
+                  color: var(--text-muted);
+                  font-family: var(--font);
+                  font-weight: 400;
+                  margin-top: 6px;
+                "
+              >
+                <code>npm ci</code> + <code>npm run build</code>.
+                <code>VITE_API_URL</code> baked in at build time.
+              </p>
+            </div>
+            <div class="card-item">
+              <h4>Stage 2: runtime</h4>
+              <p><code>nginx:1.27-alpine</code></p>
+              <p
+                style="
+                  font-size: 0.85rem;
+                  color: var(--text-muted);
+                  font-family: var(--font);
+                  font-weight: 400;
+                  margin-top: 6px;
+                "
+              >
+                <code>dist/</code> → nginx html root. Custom
+                <code>nginx.conf</code> for SPA fallback. Port 80→3000.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── 5. Database ────────────────────────────────── -->
+        <section id="database">
+          <h2 class="section-title">
+            <span class="num">5</span> Database Layer
+          </h2>
+
+          <h3 class="sub-title" id="schema">Schema — Migration 1</h3>
+          <p>
+            Managed by <strong>goose</strong>, which tracks applied migrations
+            in a <code>goose_db_version</code> table. Applied automatically on
+            every API startup.
+          </p>
+          <pre><code>CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE TYPE task_status   AS ENUM ('todo', 'in_progress', 'done');
+CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high');</code></pre>
+
+          <h4>Table: <code>users</code></h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Column</th>
+                  <th>Type</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>id</code></td>
+                  <td><code>uuid</code></td>
+                  <td>PK, auto-generated via uuid-ossp</td>
+                </tr>
+                <tr>
+                  <td><code>name</code></td>
+                  <td><code>text</code></td>
+                  <td>NOT NULL</td>
+                </tr>
+                <tr>
+                  <td><code>email</code></td>
+                  <td><code>text</code></td>
+                  <td>UNIQUE, NOT NULL</td>
+                </tr>
+                <tr>
+                  <td><code>password</code></td>
+                  <td><code>text</code></td>
+                  <td>bcrypt hash, NOT NULL</td>
+                </tr>
+                <tr>
+                  <td><code>created_at</code></td>
+                  <td><code>timestamptz</code></td>
+                  <td>Default now()</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Table: <code>projects</code></h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Column</th>
+                  <th>Type</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>id</code></td>
+                  <td><code>uuid</code></td>
+                  <td>PK</td>
+                </tr>
+                <tr>
+                  <td><code>name</code></td>
+                  <td><code>text</code></td>
+                  <td>NOT NULL</td>
+                </tr>
+                <tr>
+                  <td><code>description</code></td>
+                  <td><code>text</code></td>
+                  <td>Nullable</td>
+                </tr>
+                <tr>
+                  <td><code>owner_id</code></td>
+                  <td><code>uuid</code></td>
+                  <td>FK → users(id) ON DELETE CASCADE</td>
+                </tr>
+                <tr>
+                  <td><code>created_at</code></td>
+                  <td><code>timestamptz</code></td>
+                  <td>Default now()</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Table: <code>tasks</code></h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Column</th>
+                  <th>Type</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>id</code></td>
+                  <td><code>uuid</code></td>
+                  <td>PK</td>
+                </tr>
+                <tr>
+                  <td><code>title</code></td>
+                  <td><code>text</code></td>
+                  <td>NOT NULL</td>
+                </tr>
+                <tr>
+                  <td><code>description</code></td>
+                  <td><code>text</code></td>
+                  <td>Nullable</td>
+                </tr>
+                <tr>
+                  <td><code>status</code></td>
+                  <td><code>task_status</code></td>
+                  <td>ENUM, default <code>todo</code></td>
+                </tr>
+                <tr>
+                  <td><code>priority</code></td>
+                  <td><code>task_priority</code></td>
+                  <td>ENUM, default <code>medium</code></td>
+                </tr>
+                <tr>
+                  <td><code>project_id</code></td>
+                  <td><code>uuid</code></td>
+                  <td>FK → projects(id) ON DELETE CASCADE</td>
+                </tr>
+                <tr>
+                  <td><code>assignee_id</code></td>
+                  <td><code>uuid</code></td>
+                  <td>FK → users(id) ON DELETE SET NULL, nullable</td>
+                </tr>
+                <tr>
+                  <td><code>created_by</code></td>
+                  <td><code>uuid</code></td>
+                  <td>FK → users(id) ON DELETE CASCADE</td>
+                </tr>
+                <tr>
+                  <td><code>due_date</code></td>
+                  <td><code>date</code></td>
+                  <td>Nullable</td>
+                </tr>
+                <tr>
+                  <td><code>created_at</code></td>
+                  <td><code>timestamptz</code></td>
+                  <td>Default now()</td>
+                </tr>
+                <tr>
+                  <td><code>updated_at</code></td>
+                  <td><code>timestamptz</code></td>
+                  <td>Default now(), updated on every PATCH</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Indexes</h4>
+          <ul>
+            <li>
+              <code>idx_projects_owner_id</code> — speeds up
+              <code>WHERE owner_id = $1</code>
+            </li>
+            <li>
+              <code>idx_tasks_project_id</code> — speeds up
+              <code>WHERE project_id = $1</code>
+            </li>
+            <li>
+              <code>idx_tasks_assignee_id</code> — speeds up access checks and
+              assignee queries
+            </li>
+            <li>
+              <code>idx_tasks_created_by</code> — speeds up creator-based
+              permission checks
+            </li>
+            <li>
+              <code>idx_tasks_status</code> — speeds up
+              <code>WHERE status = $1</code> filters
+            </li>
+          </ul>
+
+          <h4>Cascade Rules</h4>
+          <ul>
+            <li>
+              Deleting a <strong>user</strong> → deletes their projects →
+              cascades to delete all tasks.
+            </li>
+            <li>
+              Deleting a <strong>project</strong> → deletes all its tasks.
+            </li>
+            <li>
+              Deleting a user who is an <strong>assignee</strong> → sets
+              <code>assignee_id = NULL</code> (no data loss).
+            </li>
+          </ul>
+
+          <h3 class="sub-title" id="seed">Seed Data — Migration 2</h3>
+          <p>
+            Inserts two users, one project, and three tasks with known fixed
+            UUIDs. Uses <code>ON CONFLICT DO NOTHING</code> for idempotency.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Email</th>
+                  <th>Password</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Test User</td>
+                  <td><code>test@example.com</code></td>
+                  <td><code>password123</code></td>
+                </tr>
+                <tr>
+                  <td>Alex Reviewer</td>
+                  <td><code>alex@example.com</code></td>
+                  <td><code>password123</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub-title" id="erd">Entity Relationships</h3>
+          <pre><code>users ──< projects   (one user owns many projects)
+users ──< tasks      (one user creates many tasks; via created_by)
+users ──< tasks      (one user assigned many tasks; via assignee_id, nullable)
+projects ──< tasks   (one project has many tasks)</code></pre>
+        </section>
+
+        <!-- ── 6. Backend ─────────────────────────────────── -->
+        <section id="backend">
+          <h2 class="section-title">
+            <span class="num">6</span> Backend — Go API
+          </h2>
+
+          <h3 class="sub-title" id="go-deps">6.1 Module &amp; Dependencies</h3>
+          <p>
+            <strong>Module:</strong> <code>taskflow/backend</code> &nbsp;|&nbsp;
+            <strong>Go version:</strong> 1.22
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Dependency</th>
+                  <th>Version</th>
+                  <th>Purpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>github.com/golang-jwt/jwt/v5</code></td>
+                  <td>v5.2.1</td>
+                  <td>JWT creation and validation</td>
+                </tr>
+                <tr>
+                  <td><code>github.com/google/uuid</code></td>
+                  <td>v1.6.0</td>
+                  <td>UUID parsing/validation</td>
+                </tr>
+                <tr>
+                  <td><code>github.com/lib/pq</code></td>
+                  <td>v1.10.9</td>
+                  <td>PostgreSQL driver for <code>database/sql</code></td>
+                </tr>
+                <tr>
+                  <td><code>github.com/pressly/goose/v3</code></td>
+                  <td>v3.21.1</td>
+                  <td>Database migration runner</td>
+                </tr>
+                <tr>
+                  <td><code>golang.org/x/crypto</code></td>
+                  <td>v0.26.0</td>
+                  <td>bcrypt password hashing</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <strong>No web framework.</strong> The entire HTTP layer uses Go's
+            stdlib <code>net/http</code> with Go 1.22's enhanced ServeMux
+            (method + path parameter support).
+          </div>
+
+          <h3 class="sub-title" id="main-go">
+            6.2 <code>main.go</code> — Entry Point
+          </h3>
+          <p>Wires together all components and manages the server lifecycle.</p>
+          <ol class="step-list">
+            <li>
+              Reads env vars: <code>DATABASE_URL</code>,
+              <code>JWT_SECRET</code> (required), <code>API_PORT</code>.
+            </li>
+            <li>
+              Opens PostgreSQL connection pool: max 10 open, 5 idle, 30 min
+              lifetime.
+            </li>
+            <li>
+              Calls <code>waitForDB()</code> — polls
+              <code>db.Ping()</code> every second for up to 30 s.
+            </li>
+            <li>
+              Runs <code>goose.Up(db, "migrations")</code> — applies pending SQL
+              migrations automatically.
+            </li>
+            <li>
+              Constructs <code>app</code> struct with <code>db</code>,
+              <code>jwtSecret</code>, <code>logger</code>, <code>broker</code>.
+            </li>
+            <li>Registers all routes via <code>app.routes(mux)</code>.</li>
+            <li>
+              Starts HTTP server: <code>ReadTimeout</code> 10s,
+              <code>ReadHeaderTimeout</code> 10s, <code>IdleTimeout</code> 60s.
+              <strong>No WriteTimeout</strong> — SSE connections are long-lived.
+            </li>
+            <li>
+              Waits for <code>SIGINT</code>/<code>SIGTERM</code>, then graceful
+              shutdown with 10 s context.
+            </li>
+          </ol>
+          <pre><code>type app struct {
+    db        *sql.DB       // shared postgres connection pool
+    jwtSecret []byte        // HMAC secret for JWT signing
+    logger    *slog.Logger  // structured JSON logger (stdout)
+    broker    *eventBroker  // in-memory SSE pub/sub
+}</code></pre>
+
+          <h3 class="sub-title" id="models-go">
+            6.3 <code>models.go</code> — Domain Types
+          </h3>
+          <pre><code>type authUser struct {
+    ID    string `json:"id"`
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+
+type project struct {
+    ID          string `json:"id"`
+    Name        string `json:"name"`
+    Description string `json:"description"`
+    OwnerID     string `json:"owner_id"`
+    CreatedAt   string `json:"created_at"`
+}
+
+type task struct {
+    ID          string  `json:"id"`
+    Title       string  `json:"title"`
+    Description string  `json:"description"`
+    Status      string  `json:"status"`
+    Priority    string  `json:"priority"`
+    ProjectID   string  `json:"project_id"`
+    AssigneeID  *string `json:"assignee_id"`  // pointer = nullable
+    CreatedBy   string  `json:"created_by"`
+    DueDate     *string `json:"due_date"`      // pointer = nullable
+    CreatedAt   string  `json:"created_at"`
+    UpdatedAt   string  `json:"updated_at"`
+}
+
+type projectDetail struct {
+    project             // embedded — all project fields
+    Tasks []task `json:"tasks"`
+}
+
+type validationError map[string]string
+
+type sseEvent struct {
+    Type string  // "task_created" | "task_updated" | "task_deleted"
+    Data any
+}</code></pre>
+
+          <h3 class="sub-title" id="middleware">
+            6.4 <code>middleware.go</code> — HTTP Middleware
+          </h3>
+
+          <h4><code>a.auth</code> — JWT Bearer verification</h4>
+          <ol class="step-list">
+            <li>
+              Reads <code>Authorization</code> header, expects
+              <code>Bearer &lt;token&gt;</code>.
+            </li>
+            <li>
+              Parses JWT with HMAC-SHA256 against <code>a.jwtSecret</code>.
+            </li>
+            <li>
+              Extracts <code>user_id</code> and <code>email</code> claims,
+              validates UUID format.
+            </li>
+            <li>
+              Queries DB:
+              <code
+                >SELECT id, name, email FROM users WHERE id=$1 AND
+                email=$2</code
+              >
+              — revoked/deleted accounts can't reuse tokens.
+            </li>
+            <li>
+              Stores <code>authUser</code> in request context under
+              <code>userKey</code>.
+            </li>
+            <li>Returns <code>401</code> at any failure step.</li>
+          </ol>
+
+          <h4><code>a.cors</code> — CORS headers</h4>
+          <p>
+            Sets <code>Access-Control-Allow-Origin: *</code>,
+            <code>Allow-Headers: Authorization, Content-Type</code>,
+            <code>Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS</code>.
+            Returns <code>204</code> to OPTIONS preflight.
+          </p>
+
+          <h4><code>a.log</code> — Request logging</h4>
+          <p>
+            Wraps response writer in a <code>statusRecorder</code> to capture
+            status code. Logs structured JSON: <code>method</code>,
+            <code>path</code>, <code>status</code>, <code>duration_ms</code>.
+            Implements <code>Unwrap()</code> so
+            <code>http.ResponseController</code> can access underlying writer.
+          </p>
+
+          <h3 class="sub-title" id="handlers-auth">
+            6.5 <code>handlers_auth.go</code>
+          </h3>
+
+          <h4>POST /auth/register (public)</h4>
+          <ul>
+            <li>
+              Validates: name not empty, email not empty, password ≥ 8 chars.
+            </li>
+            <li>Hashes password with <code>bcrypt</code> cost 12.</li>
+            <li>
+              Inserts user; handles unique constraint →
+              <code>400 {"fields":{"email":"is already registered"}}</code>.
+            </li>
+            <li>Returns <code>201</code> with <code>{ token, user }</code>.</li>
+          </ul>
+
+          <h4>POST /auth/login (public)</h4>
+          <ul>
+            <li>
+              Looks up user by email; if not found → <code>401</code> (prevents
+              enumeration).
+            </li>
+            <li>
+              Calls <code>bcrypt.CompareHashAndPassword</code>. Mismatch →
+              <code>401</code>.
+            </li>
+            <li>Returns <code>200</code> with <code>{ token, user }</code>.</li>
+          </ul>
+
+          <h4>issueToken</h4>
+          <p>
+            Creates JWT claims: <code>user_id</code>, <code>email</code>,
+            <code>exp: now + 24h</code>. Signed with <code>HS256</code>.
+          </p>
+
+          <h3 class="sub-title" id="handlers-projects">
+            6.6 <code>handlers_projects.go</code>
+          </h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Handler</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>listProjects</code></td>
+                  <td>
+                    Projects where user is owner OR assignee of any task.
+                    Paginated, sorted by <code>created_at DESC</code>.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>createProject</code></td>
+                  <td>
+                    Inserts project with <code>owner_id = currentUser.ID</code>.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>getProject</code></td>
+                  <td>
+                    Access check → fetch project + up to 1000 tasks → returns
+                    <code>projectDetail</code>.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>updateProject</code></td>
+                  <td>
+                    Owner only. Partial update using
+                    <code>*string</code> pointers.
+                    <code>NULLIF($2,'')</code> converts empty → NULL.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>deleteProject</code></td>
+                  <td>
+                    Owner only. Checks <code>RowsAffected()</code> → 404 if
+                    missing.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>projectStats</code></td>
+                  <td>
+                    Returns <code>by_status</code> counts and
+                    <code>by_assignee</code> task counts in one request.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub-title" id="handlers-tasks">
+            6.7 <code>handlers_tasks.go</code>
+          </h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Handler</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>listTasks</code></td>
+                  <td>
+                    Filterable by <code>?status=</code> and
+                    <code>?assignee=</code>; paginated.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>createTask</code></td>
+                  <td>
+                    Validates input, inserts, then
+                    <strong>publishes SSE <code>task_created</code></strong
+                    >.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>updateTask</code></td>
+                  <td>
+                    Partial update. Allowed: project owner OR task creator OR
+                    assignee. Publishes <code>task_updated</code>.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>deleteTask</code></td>
+                  <td>
+                    Only project owner or task creator. Publishes
+                    <code>task_deleted</code>.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub-title" id="handlers-sse">
+            6.8 <code>handlers_sse.go</code> — Server-Sent Events
+          </h3>
+          <div class="callout">
+            <strong>Why <code>?token=</code>?</strong> The browser's
+            <code>EventSource</code> API cannot set custom headers, so the JWT
+            is passed as a query parameter and verified server-side.
+          </div>
+          <ol class="step-list">
+            <li>
+              Reads and verifies <code>?token=</code> param via
+              <code>verifyToken()</code>.
+            </li>
+            <li>
+              Calls <code>canAccessProject</code> — checks user's access rights.
+            </li>
+            <li>
+              Uses <code>http.NewResponseController</code> to set write deadline
+              to zero (infinite) for this connection only.
+            </li>
+            <li>
+              Writes SSE headers: <code>Content-Type: text/event-stream</code>,
+              <code>Cache-Control: no-cache</code>,
+              <code>X-Accel-Buffering: no</code>.
+            </li>
+            <li>
+              Subscribes to broker, sends initial <code>: connected\n\n</code>,
+              flushes (fires browser's <code>onopen</code>).
+            </li>
+            <li>
+              Event loop: forwards broker events, sends <code>ping</code> every
+              15 s, exits on client disconnect.
+            </li>
+          </ol>
+
+          <h3 class="sub-title" id="broker">
+            6.9 <code>broker.go</code> — SSE Event Broker
+          </h3>
+          <p>
+            In-memory pub/sub that fans out task events to all connected SSE
+            clients for a given project.
+          </p>
+          <pre><code>type eventBroker struct {
+    mu      sync.Mutex
+    clients map[string]map[chan sseEvent]struct{}
+    //       projectID → set of subscriber channels
+}</code></pre>
+          <ul>
+            <li>
+              <strong>subscribe</strong>: Creates a buffered channel (capacity
+              16), registers it for the project under mutex.
+            </li>
+            <li>
+              <strong>unsubscribe</strong>: Removes channel on disconnect
+              (called via <code>defer</code> in SSE handler).
+            </li>
+            <li>
+              <strong>publish</strong>: Copies subscriber set under mutex, then
+              sends to each channel with a <strong>non-blocking send</strong> —
+              slow clients are silently skipped, never blocking the task
+              handler.
+            </li>
+          </ul>
+
+          <h3 class="sub-title" id="db-go">
+            6.10 <code>db.go</code> — Database Helpers
+          </h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Function</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>canAccessProject</code></td>
+                  <td>
+                    <code>SELECT EXISTS</code>: user is owner OR assignee of any
+                    task.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>isProjectOwner</code></td>
+                  <td>Simple check: <code>owner_id = $2</code>.</td>
+                </tr>
+                <tr>
+                  <td><code>findProject</code></td>
+                  <td>
+                    Single row query with <code>COALESCE(description,'')</code>.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>tasksForProject</code></td>
+                  <td>
+                    Dynamically builds WHERE clause for optional status/assignee
+                    filters. Returns count + page.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>insertTask</code></td>
+                  <td>
+                    <code>INSERT ... RETURNING *</code>. Uses
+                    <code>nullableString()</code> for optional fields.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>findTaskWithOwner</code></td>
+                  <td>
+                    JOIN query returning task + <code>p.owner_id</code> in one
+                    round trip.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub-title" id="helpers-go">
+            6.11 <code>helpers.go</code> — Utility Functions
+          </h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Function</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>scanProject / scanTask</code></td>
+                  <td>
+                    Accept <code>*sql.Row</code> or <code>*sql.Rows</code> via
+                    the <code>scanner</code> interface.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>validateTaskInput</code></td>
+                  <td>
+                    Validates title, status (allow-list), priority (allow-list),
+                    UUID format, date format.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>decodeJSON</code></td>
+                  <td>
+                    Decodes body into dst; writes <code>400</code> on failure.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>writeJSON / writeValidation / writeError</code></td>
+                  <td>Centralised response writers.</td>
+                </tr>
+                <tr>
+                  <td><code>currentUser</code></td>
+                  <td>Extracts <code>authUser</code> from context.</td>
+                </tr>
+                <tr>
+                  <td><code>nullableString</code></td>
+                  <td>
+                    Returns <code>nil</code> for empty strings, otherwise the
+                    value — prevents empty-string insertions.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>validUUID / validStatus / validPriority</code></td>
+                  <td>Pure allow-list validators.</td>
+                </tr>
+                <tr>
+                  <td><code>parsePagination</code></td>
+                  <td>
+                    Reads <code>?page=</code> &amp; <code>?limit=</code> with
+                    defaults and upper bound (100).
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>waitForDB</code></td>
+                  <td>
+                    Polls <code>db.PingContext</code> every 1 s for up to 30 s
+                    at startup.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub-title" id="tests">
+            6.12 <code>main_test.go</code> — Integration Tests
+          </h3>
+          <p>
+            Run against a real PostgreSQL DB. Set
+            <code>TEST_DATABASE_URL</code> or all tests skip automatically.
+          </p>
+          <ul>
+            <li>
+              <code>testApp(t)</code> — opens DB, runs migrations, returns app +
+              teardown (<code>goose.DownTo(db, dir, 0)</code>).
+            </li>
+            <li>
+              <code>do(a, method, path, body, token)</code> — fires requests
+              through the full middleware chain using <code>httptest</code>.
+            </li>
+          </ul>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Test</th>
+                  <th>Verifies</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>TestRegisterAndLogin</code></td>
+                  <td>Register, login with correct/wrong credentials</td>
+                </tr>
+                <tr>
+                  <td><code>TestRegisterDuplicateEmail</code></td>
+                  <td>Second register with same email → 400 field error</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub-title" id="routes">6.13 Full API Route Table</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Method</th>
+                  <th>Path</th>
+                  <th>Auth</th>
+                  <th>Handler</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="method get">GET</span></td>
+                  <td><code>/</code></td>
+                  <td>None</td>
+                  <td>Health check</td>
+                </tr>
+                <tr>
+                  <td><span class="method get">GET</span></td>
+                  <td><code>/healthz</code></td>
+                  <td>None</td>
+                  <td><code>{status:"ok"}</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method post">POST</span></td>
+                  <td><code>/auth/register</code></td>
+                  <td>None</td>
+                  <td><code>register</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method post">POST</span></td>
+                  <td><code>/auth/login</code></td>
+                  <td>None</td>
+                  <td><code>login</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method get">GET</span></td>
+                  <td><code>/users</code></td>
+                  <td>JWT Bearer</td>
+                  <td><code>listUsers</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method get">GET</span></td>
+                  <td><code>/projects</code></td>
+                  <td>JWT Bearer</td>
+                  <td><code>listProjects</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method post">POST</span></td>
+                  <td><code>/projects</code></td>
+                  <td>JWT Bearer</td>
+                  <td><code>createProject</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method get">GET</span></td>
+                  <td><code>/projects/{id}</code></td>
+                  <td>JWT Bearer</td>
+                  <td><code>getProject</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method patch">PATCH</span></td>
+                  <td><code>/projects/{id}</code></td>
+                  <td>JWT + owner</td>
+                  <td><code>updateProject</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method delete">DELETE</span></td>
+                  <td><code>/projects/{id}</code></td>
+                  <td>JWT + owner</td>
+                  <td><code>deleteProject</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method get">GET</span></td>
+                  <td><code>/projects/{id}/tasks</code></td>
+                  <td>JWT Bearer</td>
+                  <td><code>listTasks</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method post">POST</span></td>
+                  <td><code>/projects/{id}/tasks</code></td>
+                  <td>JWT Bearer</td>
+                  <td><code>createTask</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method get">GET</span></td>
+                  <td><code>/projects/{id}/stats</code></td>
+                  <td>JWT Bearer</td>
+                  <td><code>projectStats</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method get">GET</span></td>
+                  <td><code>/projects/{id}/events</code></td>
+                  <td><code>?token=</code> JWT</td>
+                  <td><code>projectEvents</code> (SSE)</td>
+                </tr>
+                <tr>
+                  <td><span class="method patch">PATCH</span></td>
+                  <td><code>/tasks/{id}</code></td>
+                  <td>JWT + perms</td>
+                  <td><code>updateTask</code></td>
+                </tr>
+                <tr>
+                  <td><span class="method delete">DELETE</span></td>
+                  <td><code>/tasks/{id}</code></td>
+                  <td>JWT + perms</td>
+                  <td><code>deleteTask</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub-title" id="auth-flow">6.14 Authentication Flow</h3>
+          <div class="flow-box">
+            <pre>
+Client                                           Server
+  │                                                │
+  │  POST /auth/login {email, password}            │
+  │ ──────────────────────────────────────────►   │
+  │                                                │  SELECT user WHERE email=$1
+  │                                                │  bcrypt.Compare(hash, password)
+  │                                                │  JWT.Sign({user_id, email, exp:+24h})
+  │  200 { token: "eyJ...", user: {...} }          │
+  │ ◄──────────────────────────────────────────   │
+  │  [stores token in localStorage]                │
+  │                                                │
+  │  GET /projects  Authorization: Bearer eyJ...  │
+  │ ──────────────────────────────────────────►   │
+  │                                                │  jwt.Parse → validate signature
+  │                                                │  SELECT user WHERE id=$1 AND email=$2
+  │                                                │  context.WithValue(ctx, userKey, user)
+  │  200 { projects: [...] }                       │
+  │ ◄──────────────────────────────────────────   │</pre
+            >
+          </div>
+
+          <h3 class="sub-title" id="authz">6.15 Authorization Rules</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Who can perform it</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>View a project</td>
+                  <td>
+                    Project owner OR user assigned to any task in the project
+                  </td>
+                </tr>
+                <tr>
+                  <td>Edit project metadata</td>
+                  <td>Project owner only</td>
+                </tr>
+                <tr>
+                  <td>Delete a project</td>
+                  <td>Project owner only</td>
+                </tr>
+                <tr>
+                  <td>View tasks</td>
+                  <td>Same as viewing the project</td>
+                </tr>
+                <tr>
+                  <td>Create a task</td>
+                  <td>Anyone who can access the project</td>
+                </tr>
+                <tr>
+                  <td>Edit a task</td>
+                  <td>Project owner OR task creator OR current assignee</td>
+                </tr>
+                <tr>
+                  <td>Delete a task</td>
+                  <td>Project owner OR task creator</td>
+                </tr>
+                <tr>
+                  <td>View SSE events</td>
+                  <td>Same as viewing the project</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ── 7. Frontend ────────────────────────────────── -->
+        <section id="frontend">
+          <h2 class="section-title">
+            <span class="num">7</span> Frontend — React + TypeScript
+          </h2>
+
+          <h3 class="sub-title" id="fe-tech">7.1 Tech Stack &amp; Build</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Technology</th>
+                  <th>Version</th>
+                  <th>Purpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>React</td>
+                  <td>18.3</td>
+                  <td>UI component library</td>
+                </tr>
+                <tr>
+                  <td>TypeScript</td>
+                  <td>5.5</td>
+                  <td>Type safety</td>
+                </tr>
+                <tr>
+                  <td>Vite</td>
+                  <td>5.4</td>
+                  <td>Dev server and bundler</td>
+                </tr>
+                <tr>
+                  <td>react-router-dom</td>
+                  <td>6.26</td>
+                  <td>Client-side SPA routing</td>
+                </tr>
+                <tr>
+                  <td>@vitejs/plugin-react</td>
+                  <td>4.3</td>
+                  <td>React Fast Refresh in dev</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <strong>Build-time env injection:</strong>
+            <code>VITE_API_URL</code> is baked into the JS bundle by Vite at
+            build time — it is not available at runtime and cannot be changed
+            without rebuilding.
+          </div>
+
+          <h3 class="sub-title" id="index-html">7.2 <code>index.html</code></h3>
+          <p>
+            Minimal HTML shell with
+            <code>&lt;div id="root"&gt;&lt;/div&gt;</code> as the React mount
+            point and a
+            <code>&lt;script type="module" src="/src/App.tsx"&gt;</code> that
+            Vite processes during dev and replaces with the bundled JS in
+            production.
+          </p>
+
+          <h3 class="sub-title" id="app-tsx">
+            7.3 <code>App.tsx</code> — Root Component &amp; Routing
+          </h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Path</th>
+                  <th>Component</th>
+                  <th>Guard</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>/</code></td>
+                  <td>Redirect → <code>/projects</code></td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td><code>/login</code></td>
+                  <td><code>AuthPage mode="login"</code></td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td><code>/register</code></td>
+                  <td><code>AuthPage mode="register"</code></td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td><code>/projects</code></td>
+                  <td><code>ProjectsPage</code></td>
+                  <td>Protected</td>
+                </tr>
+                <tr>
+                  <td><code>/projects/:id</code></td>
+                  <td><code>ProjectDetailPage</code></td>
+                  <td>Protected</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>useDarkMode()</code> provides
+            <code>[dark, toggleDark, resetDark]</code>.
+            <code>resetDark</code> is passed to <code>AuthProvider</code> as
+            <code>onLogout</code> so dark mode resets to light on logout.
+          </p>
+
+          <h3 class="sub-title" id="main-css">
+            7.4 <code>main.css</code> — Design Tokens &amp; Styles
+          </h3>
+          <p>
+            All styles in one file using CSS custom properties for a consistent
+            design system. Dark mode toggles via
+            <code>document.documentElement.classList.toggle("dark", dark)</code
+            >.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Variable</th>
+                  <th>Light Value</th>
+                  <th>Purpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>--bg</code></td>
+                  <td><code>#f6f7f3</code></td>
+                  <td>Page background</td>
+                </tr>
+                <tr>
+                  <td><code>--bg-card</code></td>
+                  <td><code>#ffffff</code></td>
+                  <td>Card/panel background</td>
+                </tr>
+                <tr>
+                  <td><code>--brand</code></td>
+                  <td><code>#1f5b45</code></td>
+                  <td>Primary brand colour (dark green)</td>
+                </tr>
+                <tr>
+                  <td><code>--text</code></td>
+                  <td><code>#1e2623</code></td>
+                  <td>Primary text</td>
+                </tr>
+                <tr>
+                  <td><code>--text-muted</code></td>
+                  <td><code>#65706b</code></td>
+                  <td>Secondary text</td>
+                </tr>
+                <tr>
+                  <td><code>--border</code></td>
+                  <td><code>#dfe4dc</code></td>
+                  <td>General borders</td>
+                </tr>
+                <tr>
+                  <td><code>--pill-bg</code></td>
+                  <td><code>#e8efe7</code></td>
+                  <td>Status pill backgrounds</td>
+                </tr>
+                <tr>
+                  <td><code>--shadow</code></td>
+                  <td><code>rgba(35,51,45,0.08)</code></td>
+                  <td>Card drop shadows</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub-title" id="types-ts">
+            7.5 <code>types.ts</code> — Shared TypeScript Types
+          </h3>
+          <pre><code>export type Task = {
+  id: string;
+  title: string;
+  description: string;
+  status: "todo" | "in_progress" | "done";
+  priority: "low" | "medium" | "high";
+  assignee_id: string | null;
+  due_date: string | null;
+  ...
+};
+
+// Discriminated union — TypeScript narrows event.data by event.type
+export type SSETaskEvent =
+  | { type: "task_created"; data: Task }
+  | { type: "task_updated"; data: Task }
+  | { type: "task_deleted"; data: { id: string; project_id: string } };</code></pre>
+
+          <h3 class="sub-title" id="client-ts">
+            7.6 <code>api/client.ts</code> — HTTP Client
+          </h3>
+          <pre><code>export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+
+export async function request&lt;T&gt;(path, options): Promise&lt;T&gt;</code></pre>
+          <ul>
+            <li>
+              Sets <code>Content-Type: application/json</code> and
+              <code>Authorization: Bearer &lt;token&gt;</code> if provided.
+            </li>
+            <li>
+              <code>204 No Content</code> → returns
+              <code>undefined as T</code> (skips JSON parse).
+            </li>
+            <li>
+              On <code>!res.ok</code>: extracts
+              <code>data.fields</code> (validation) or <code>data.error</code>,
+              throws <code>Error</code>.
+            </li>
+          </ul>
+
+          <h3 class="sub-title" id="auth-context">
+            7.7 <code>AuthContext.tsx</code> — Auth State
+          </h3>
+          <p>
+            Global React Context providing authentication to the whole tree.
+            State is initialised from and persisted to
+            <code>localStorage</code> (<code>taskflow_token</code>,
+            <code>taskflow_user</code>).
+          </p>
+          <ul>
+            <li>
+              <code>login(email, password)</code> →
+              <code>POST /auth/login</code>, updates state + localStorage.
+            </li>
+            <li>
+              <code>register(name, email, password)</code> →
+              <code>POST /auth/register</code>.
+            </li>
+            <li>
+              <code>logout()</code> → clears <code>taskflow_token</code>,
+              <code>taskflow_user</code>, <code>taskflow_dark</code>; calls
+              <code>onLogout()</code>.
+            </li>
+          </ul>
+          <p>
+            Context value is memoised with <code>useMemo</code>.
+            <code>useAuth()</code> convenience hook throws if used outside
+            <code>AuthProvider</code>.
+          </p>
+
+          <h3 class="sub-title" id="dark-mode">
+            7.8 <code>useDarkMode.ts</code>
+          </h3>
+          <pre><code>export function useDarkMode(): [boolean, () => void, () => void]
+//                              [dark,    toggle,    reset]</code></pre>
+          <p>
+            Toggles <code>dark</code> class on
+            <code>document.documentElement</code> and persists to localStorage.
+            <code>reset()</code> sets to <code>false</code> — called on logout.
+          </p>
+
+          <h3 class="sub-title" id="sse-hook">
+            7.9 <code>useProjectEvents.ts</code> — SSE Hook
+          </h3>
+          <pre><code>export function useProjectEvents(
+  projectId: string | undefined,
+  token: string | null,
+  onEvent: (e: SSETaskEvent) => void,
+): boolean  // connected status</code></pre>
+          <ul>
+            <li>
+              Creates <code>EventSource</code> at
+              <code>/projects/{id}/events?token=&lt;encoded&gt;</code>.
+            </li>
+            <li>
+              Listens for named events: <code>ping</code>,
+              <code>task_created</code>, <code>task_updated</code>,
+              <code>task_deleted</code>.
+            </li>
+            <li>
+              Uses a <code>ref</code> for <code>onEvent</code> so SSE listeners
+              always call the latest callback without triggering reconnects.
+            </li>
+            <li>
+              Closes <code>EventSource</code> on unmount or dependency change.
+            </li>
+          </ul>
+
+          <h3 class="sub-title" id="layout-tsx">
+            7.10 <code>Layout.tsx</code> — Shell Layout
+          </h3>
+          <p>
+            Wraps every authenticated page. Renders a
+            <code>&lt;nav&gt;</code> with brand link, user name, dark-mode
+            toggle (<code>MoonIcon</code>/<code>SunIcon</code>), and logout
+            button. Main content is in
+            <code>&lt;main className="page"&gt;</code>.
+          </p>
+
+          <h3 class="sub-title" id="protected">
+            7.11 <code>Protected.tsx</code> — Route Guard
+          </h3>
+          <pre><code>if (!token) return &lt;Navigate to="/login" replace /&gt;;
+return &lt;&gt;{children}&lt;/&gt;;</code></pre>
+          <p>
+            Uses <code>replace</code> so the user can't press back to revisit a
+            protected page.
+          </p>
+
+          <h3 class="sub-title" id="field">
+            7.12 <code>Field.tsx</code> — Form Field Wrapper
+          </h3>
+          <p>
+            Wraps a form control in a <code>&lt;label&gt;</code> + bold
+            <code>&lt;span&gt;</code>. The <code>&lt;label&gt;</code> element
+            makes the label text clickable to focus the input (accessibility).
+          </p>
+
+          <h3 class="sub-title" id="icons">
+            7.13 <code>icons.tsx</code> — SVG Icons
+          </h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Export</th>
+                  <th>Description</th>
+                  <th>Used in</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>EyeIcon</code></td>
+                  <td>Open eye (show password)</td>
+                  <td><code>AuthPage</code></td>
+                </tr>
+                <tr>
+                  <td><code>EyeOffIcon</code></td>
+                  <td>Eye with slash (hide password)</td>
+                  <td><code>AuthPage</code></td>
+                </tr>
+                <tr>
+                  <td><code>MoonIcon</code></td>
+                  <td>Crescent moon</td>
+                  <td><code>Layout</code> dark toggle</td>
+                </tr>
+                <tr>
+                  <td><code>SunIcon</code></td>
+                  <td>Sun</td>
+                  <td><code>Layout</code> dark toggle</td>
+                </tr>
+                <tr>
+                  <td><code>ArrowLeftIcon</code></td>
+                  <td>Left arrow (back navigation)</td>
+                  <td><code>ProjectDetailPage</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            All icons use <code>stroke="currentColor"</code> — they inherit text
+            colour automatically in both themes.
+            <code>aria-hidden="true"</code> marks them as decorative.
+          </p>
+
+          <h3 class="sub-title" id="task-modal">
+            7.14 <code>TaskModal.tsx</code> — Task Create/Edit Modal
+          </h3>
+          <p>
+            Full-screen modal backed by <code>position: fixed</code> backdrop.
+            Doubles as create (when <code>task=null</code>) and edit (when
+            <code>task=&lt;Task&gt;</code>).
+          </p>
+          <ul>
+            <li>
+              A <code>useEffect([task])</code> syncs all state when the prop
+              changes — handles reuse of the same modal for different tasks.
+            </li>
+            <li>
+              On submit: <code>PATCH /tasks/{id}</code> for edits,
+              <code>POST /projects/{id}/tasks</code> for creates.
+            </li>
+            <li>
+              Empty string for <code>assignee_id</code>/<code>due_date</code>
+              clears nullable fields (matched by backend's <code>NULLIF</code>).
+            </li>
+          </ul>
+
+          <h3 class="sub-title" id="auth-page">
+            7.15 <code>AuthPage.tsx</code> — Login &amp; Register
+          </h3>
+          <p>
+            Two-column layout: decorative art panel + form panel. Mode
+            (<code>"login"</code>/<code>"register"</code>) controls visible
+            fields and API endpoint. Email pre-filled with
+            <code>test@example.com</code> for demo convenience. Shows a success
+            toast on register, then navigates after 1200 ms.
+          </p>
+
+          <h3 class="sub-title" id="projects-page">
+            7.16 <code>ProjectsPage.tsx</code> — Projects List
+          </h3>
+          <p>
+            Grid of project cards + create form. Fetches
+            <code>GET /projects?page=1&amp;limit=12</code>. Each card is a
+            full-width <code>&lt;Link&gt;</code>. Prev/Next pagination shown
+            when <code>totalPages &gt; 1</code>.
+          </p>
+
+          <h3 class="sub-title" id="detail-page">
+            7.17 <code>ProjectDetailPage.tsx</code> — Kanban Board
+          </h3>
+          <p>The most complex component. Key features:</p>
+          <ul>
+            <li>
+              <strong>URL filter state</strong>:
+              <code>useSearchParams</code> stores status/assignee filters in the
+              URL — filters survive refresh and are shareable.
+            </li>
+            <li>
+              <strong>SSE integration</strong>:
+              <code>useProjectEvents</code> drives the <code>● Live</code> badge
+              and patches task state in real time.
+            </li>
+            <li>
+              <strong>Kanban grouping</strong>: Tasks split into three arrays by
+              status; each rendered as a droppable column.
+            </li>
+            <li>
+              <strong>HTML5 Drag API</strong>: <code>onDragStart</code> stores
+              <code>taskId</code> in <code>dataTransfer</code>;
+              <code>onDrop</code> reads it and calls
+              <code>optimisticStatus</code>.
+            </li>
+            <li>
+              <strong>Optimistic updates</strong>: Status change applied
+              instantly in UI, then confirmed by API; reverted on error.
+            </li>
+            <li>
+              <strong>Parallel data load</strong>:
+              <code>Promise.all([GET /projects/{id}, GET /users])</code> on
+              mount.
+            </li>
+            <li>
+              <strong>Two filter effects</strong>: One re-fetches on filter
+              change, another on page change.
+            </li>
+          </ul>
+
+          <h3 class="sub-title" id="label-status">
+            7.18 <code>utils/labelStatus.ts</code>
+          </h3>
+          <pre><code>export function labelStatus(status: Task["status"]): string
+// "in_progress" → "In progress"
+// "todo"        → "Todo"
+// "done"        → "Done"</code></pre>
+        </section>
+
+        <!-- ── 8. Data Flow ───────────────────────────────── -->
+        <section id="data-flow">
+          <h2 class="section-title">
+            <span class="num">8</span> Data Flow Walkthroughs
+          </h2>
+
+          <h3 class="sub-title">8.1 Login</h3>
+          <div class="flow-box">
+            <pre>
+User types email+password → clicks Log in
+  AuthPage.submit()
+    → useAuth().login(email, password)
+      → request POST /auth/login {email, password}
+          → Go: SELECT user WHERE email=$1
+                bcrypt.Compare(hash, password)
+                JWT.Sign({user_id, email, exp:+24h})
+          ← 200 { token:"eyJ...", user:{...} }
+        localStorage.setItem("taskflow_token", token)
+        setToken(token); setUser(user)
+    navigate("/projects")</pre
+            >
+          </div>
+
+          <h3 class="sub-title">8.2 Create a Task</h3>
+          <div class="flow-box">
+            <pre>
+User fills TaskModal → clicks Save task
+  TaskModal.submit()
+    → request POST /projects/{id}/tasks {body}
+        → Go: auth middleware → verifies JWT, loads user
+          → createTask handler
+              canAccessProject(ctx, projectID, user.ID)
+              validateTaskInput(...)
+              insertTask → INSERT INTO tasks RETURNING *
+              broker.publish(projectID, {Type:"task_created", Data:task})
+        ← 201 { task }
+      onSaved(task) → setTasks(prev => [task, ...prev])</pre
+            >
+          </div>
+
+          <h3 class="sub-title">8.3 Real-Time SSE Update</h3>
+          <div class="flow-box">
+            <pre>
+Another user saves a task in the same project:
+
+  Server: broker.publish(projectID, {Type:"task_updated", Data:task})
+    for each subscriber channel: non-blocking send
+
+  SSE handler loop:
+    case ev := &lt;-ch:
+      json.Marshal(ev.Data) → b
+      fmt.Fprintf(w, "event: task_updated\ndata: %s\n\n", b)
+      rc.Flush()  ← immediate send
+
+  Client (useProjectEvents):
+    EventSource fires "task_updated" event
+    JSON.parse(e.data) → Task
+    onEventRef.current({ type:"task_updated", data:Task })
+
+  ProjectDetailPage:
+    setTasks(prev => prev.map(t => t.id===task.id ? task : t))
+    // task card updates immediately in the Kanban board</pre
+            >
+          </div>
+
+          <h3 class="sub-title">8.4 Drag-and-Drop Status Change</h3>
+          <div class="flow-box">
+            <pre>
+User drags "Design homepage" from Todo → In Progress:
+
+  handleDragStart(e, taskId)
+    → e.dataTransfer.setData("taskId", taskId)
+
+  handleDragOver(e, "in_progress")
+    → e.preventDefault()         (required to allow drop)
+    → setDragOverCol("in_progress")
+    → CSS .column--drag-over applied → dashed green border
+
+  handleDrop(e, "in_progress")
+    → taskId = e.dataTransfer.getData("taskId")
+    → optimisticStatus(task, "in_progress"):
+        1. setTasks(map → status:"in_progress")  INSTANT
+        2. PATCH /tasks/{id} {status:"in_progress"}
+             → UPDATE tasks SET status=... RETURNING *
+             → broker.publish → SSE to all other clients
+        3. setTasks(map → server-confirmed task)
+           (revert on error)</pre
+            >
+          </div>
+        </section>
+
+        <!-- ── 9. Security ────────────────────────────────── -->
+        <section id="security">
+          <h2 class="section-title">
+            <span class="num">9</span> Security Design
+          </h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Concern</th>
+                  <th>Implementation</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Password storage</strong></td>
+                  <td>
+                    bcrypt cost 12 — resistant to brute-force; never stored in
+                    plain text.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>Authentication</strong></td>
+                  <td>
+                    JWT HS256. Every protected request validates signature +
+                    performs DB user lookup.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>Token expiry</strong></td>
+                  <td>24-hour <code>exp</code> claim.</td>
+                </tr>
+                <tr>
+                  <td><strong>SSE auth</strong></td>
+                  <td>
+                    Token in <code>?token=</code> (unavoidable with
+                    <code>EventSource</code>); fully verified server-side.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>SQL injection</strong></td>
+                  <td>
+                    All queries use parameterised statements (<code>$1</code>,
+                    <code>$2</code>…). Zero string concatenation of user input.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>UUID validation</strong></td>
+                  <td>
+                    All path params and IDs validated with
+                    <code>uuid.Parse</code> before use.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>Input validation</strong></td>
+                  <td>
+                    Enum allow-lists; date format check; length requirements.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>Access control</strong></td>
+                  <td>
+                    Every endpoint verifies the user's relationship to the
+                    resource.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>CORS</strong></td>
+                  <td>
+                    Currently <code>*</code> — fine for dev. Restrict to actual
+                    origin in production.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>Privilege separation</strong></td>
+                  <td>
+                    Backend runs as non-root <code>appuser</code> in Docker.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>Graceful shutdown</strong></td>
+                  <td>10 s grace period prevents abrupt connection drops.</td>
+                </tr>
+                <tr>
+                  <td><strong>Log safety</strong></td>
+                  <td>
+                    Logs only method, path, status, duration — no request bodies
+                    or tokens.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ── 10. Running ───────────────────────────────── -->
+        <section id="running">
+          <h2 class="section-title">
+            <span class="num">10</span> Running the Project
+          </h2>
+
+          <h3 class="sub-title">Prerequisites</h3>
+          <ul>
+            <li>Docker and Docker Compose installed.</li>
+            <li>A <code>.env</code> file in the project root.</li>
+          </ul>
+
+          <h3 class="sub-title">.env File</h3>
+          <div class="env-block">
+            <span class="key">JWT_SECRET</span
+            ><span class="val">=your-super-secret-key-here</span><br />
+            <span class="comment"># Optional overrides (defaults shown):</span
+            ><br />
+            <span class="comment"># POSTGRES_USER=taskflow</span><br />
+            <span class="comment"># POSTGRES_PASSWORD=taskflow</span><br />
+            <span class="comment"># POSTGRES_DB=taskflow</span><br />
+            <span class="comment"># POSTGRES_PORT=5432</span><br />
+            <span class="comment"># API_PORT=4000</span><br />
+            <span class="comment"># VITE_API_URL=http://localhost:4000</span>
+          </div>
+
+          <h3 class="sub-title">Start Everything</h3>
+          <pre><code>docker compose up --build</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Service</th>
+                  <th>URL</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Frontend</td>
+                  <td><code>http://localhost:3000</code></td>
+                </tr>
+                <tr>
+                  <td>API</td>
+                  <td><code>http://localhost:4000</code></td>
+                </tr>
+                <tr>
+                  <td>Database</td>
+                  <td><code>localhost:5432</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub-title">Seed Credentials</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Password</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>test@example.com</code></td>
+                  <td><code>password123</code></td>
+                </tr>
+                <tr>
+                  <td><code>alex@example.com</code></td>
+                  <td><code>password123</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub-title">Backend Tests</h3>
+          <pre><code>export TEST_DATABASE_URL="postgres://taskflow:taskflow@localhost:5432/taskflow_test?sslmode=disable"
+cd backend
+go test ./cmd/api/...</code></pre>
+
+          <h3 class="sub-title">Local Development (without Docker)</h3>
+          <pre><code># Backend
+export DATABASE_URL="postgres://taskflow:taskflow@localhost:5432/taskflow?sslmode=disable"
+export JWT_SECRET="dev-secret"
+cd backend
+go run ./cmd/api
+
+# Frontend (in a separate terminal)
+cd frontend
+npm install
+VITE_API_URL=http://localhost:4000 npm run dev
+# → http://localhost:5173</code></pre>
+
+          <a class="back-top" href="#top">↑ Back to top</a>
+        </section>
+      </div>
+    </div>
+
+    <!-- ── Footer ─────────────────────────────────────────── -->
+    <footer>
+      <span><strong>TaskFlow</strong> — Full Project Documentation</span>
+      <span>Go · PostgreSQL · React 18 · TypeScript · Vite · Docker</span>
+    </footer>
+  </body>
+</html>
