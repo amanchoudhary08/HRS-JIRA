@@ -12,20 +12,17 @@ import java.util.UUID;
 
 public interface ProjectRepository extends JpaRepository<Project, UUID> {
 
-    @Query("""
+    @Query(value = """
         SELECT DISTINCT p FROM Project p
         LEFT JOIN Task t ON t.project = p
         WHERE p.owner = :user OR t.assignee = :user
-        ORDER BY p.createdAt DESC
-        """)
-    Page<Project> findAccessibleByUser(@Param("user") User user, Pageable pageable);
-
-    @Query("""
-        SELECT COUNT(DISTINCT p.id) FROM Project p
+        """,
+        countQuery = """
+        SELECT COUNT(DISTINCT p) FROM Project p
         LEFT JOIN Task t ON t.project = p
         WHERE p.owner = :user OR t.assignee = :user
         """)
-    long countAccessibleByUser(@Param("user") User user);
+    Page<Project> findAccessibleByUser(@Param("user") User user, Pageable pageable);
 
     @Query("""
         SELECT CASE WHEN COUNT(p) > 0 THEN true ELSE false END

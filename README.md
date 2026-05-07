@@ -6,13 +6,13 @@ TaskFlow is a compact full-stack task management app. Reviewers can register or 
 
 Tech stack:
 
-- Backend: Go, `net/http`, PostgreSQL, goose migrations, bcrypt, JWT, `slog`
+- Backend: Java, Spring Boot, PostgreSQL, Flyway migrations, bcrypt, JWT
 - Frontend: React, TypeScript, Vite, React Router, custom CSS components
 - Infrastructure: Docker Compose with PostgreSQL, API, and static frontend served by nginx
 
 ## Architecture Decisions
 
-The backend is intentionally explicit and small. It uses `database/sql` rather than an ORM so the SQL, authorization checks, and migrations are easy to review in a take-home setting. Migrations live in `backend/migrations` and run automatically at API startup through goose.
+The backend is intentionally explicit and small. It uses Spring Data JPA with PostgreSQL so the authorization checks and migrations are easy to review in a take-home setting. Migrations live in `backend/src/main/resources/db/migration` and run automatically at API startup through Flyway.
 
 The API keeps auth separate from project/task handlers with middleware that validates `Authorization: Bearer <token>`, checks expiry through JWT claims, and loads the current user from the database. Project access follows the assignment rule: a user can list or view projects they own or have tasks assigned in. Mutating project metadata and deleting projects are owner-only. Task deletion is limited to the project owner or the task creator; task updates also allow the assignee so assigned users can move work through the board.
 
@@ -30,10 +30,10 @@ Intentional tradeoffs:
 
 - **Dark mode** — Toggle button in the navbar (moon/sun icon). Preference is persisted to `localStorage` and applied immediately via a `.dark` class on `<html>`. Both light and dark themes are fully styled.
 - **Stats endpoint** — `GET /projects/:id/stats` returns task counts grouped by status and by assignee.
-- **Real-time updates via SSE** — `GET /projects/:id/events` streams Server-Sent Events to the project detail view. The backend holds an in-process broker (per-project pub/sub channels, goroutine-safe). After every task create, update, or delete the broker pushes the event to all subscribers. The frontend opens an `EventSource` when a project is opened, applies incoming events to state using functional updates (deduplication included), and shows a "● Live" / "○ Connecting" badge in the toolbar. Because `EventSource` cannot send custom headers, the JWT is passed as a `?token=` query parameter and validated in the SSE handler independently of the regular `auth` middleware.
+- **Real-time updates via SSE** — `GET /projects/:id/events` streams Server-Sent Events to the project detail view. The backend holds an in-process `EventBroker` (per-project pub/sub, thread-safe). After every task create, update, or delete the broker pushes the event to all subscribers. The frontend opens an `EventSource` when a project is opened, applies incoming events to state using functional updates (deduplication included), and shows a "● Live" / "○ Connecting" badge in the toolbar. Because `EventSource` cannot send custom headers, the JWT is passed as a `?token=` query parameter and validated in the SSE handler independently of the regular auth filter.
 - **Pagination** — `GET /projects` and `GET /projects/:id/tasks` both accept `?page=&limit=` (default limit 20, max 100). Responses include `page`, `limit`, and `total`. The frontend renders Prev/Next controls when there is more than one page.
 - **Drag-and-drop** — Task cards on the project detail kanban board are draggable. Dropping a card onto a different status column triggers an optimistic status update (reverts on API error). Implemented with the HTML5 Drag-and-Drop API — no additional dependency.
-- **Integration tests** — `backend/cmd/api/main_test.go` contains 6 integration test functions covering register/login, duplicate email rejection, unauthenticated access, project + task lifecycle, owner-only enforcement, and validation errors. Tests run against a real PostgreSQL database pointed to by `TEST_DATABASE_URL`; they are skipped automatically when that variable is not set.
+- **Integration tests** — Spring Boot test slice tests covering register/login, duplicate email rejection, unauthenticated access, project + task lifecycle, owner-only enforcement, and validation errors.
 
 ## Running Locally
 
@@ -54,9 +54,7 @@ The app will be available at:
 
 ## Running Migrations
 
-Migrations run automatically when the API container starts. The API waits for PostgreSQL, opens the database, then runs goose migrations from `backend/migrations`.
-
-Each migration file includes both `-- +goose Up` and `-- +goose Down` sections.
+Migrations run automatically when the API container starts. Flyway applies pending SQL files from `backend/src/main/resources/db/migration` in version order (V1, V2, …).
 
 ## Test Credentials
 
