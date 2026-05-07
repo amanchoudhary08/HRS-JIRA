@@ -31,12 +31,23 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
+        // For SSE endpoints the browser EventSource cannot set headers, so the JWT
+        // is passed as a ?token= query parameter instead.
         String header = request.getHeader("Authorization");
-        if (header == null || !header.startsWith("Bearer ")) {
+        String token = null;
+        if (header != null && header.startsWith("Bearer ")) {
+            token = header.substring(7);
+        } else {
+            String queryToken = request.getParameter("token");
+            if (queryToken != null && !queryToken.isEmpty()) {
+                token = queryToken;
+            }
+        }
+
+        if (token == null) {
             chain.doFilter(request, response);
             return;
         }
-        String token = header.substring(7);
         try {
             UUID userId = jwtUtil.extractUserId(token);
             String email = jwtUtil.extractEmail(token);

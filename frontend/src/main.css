@@ -12,7 +12,7 @@
   --pill-color: #275640;
   --empty-border: #b8c5bb;
   --shadow: rgba(35, 51, 45, 0.08);
-  --modal-overlay: rgba(25, 31, 28, 0.5);
+  --modal-overlay: rgba(0, 0, 0, 0.8);
   --error-border: #b42318;
   --error-bg: #fff1ed;
   --error-text: #7a271a;
@@ -29,27 +29,6 @@
   background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-}
-
-:root.dark {
-  --bg: #0e1512;
-  --bg-card: #1a2420;
-  --bg-nav: #141c19;
-  --border: #2a3830;
-  --border-input: #2e3f38;
-  --text: #d4e4df;
-  --text-muted: #8aada4;
-  --text-label: #a8c4bc;
-  --brand: #5bbf94;
-  --pill-bg: #1a3328;
-  --pill-color: #6dd4a8;
-  --empty-border: #2a3830;
-  --shadow: rgba(0, 0, 0, 0.35);
-  --modal-overlay: rgba(0, 0, 0, 0.65);
-  --error-border: #e05353;
-  --error-bg: #2d1515;
-  --error-text: #f4a4a4;
-  --success-border: #3d8c65;
 }
 
 * {
@@ -97,6 +76,9 @@ button {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+.underline {
+  text-decoration: underline;
 }
 .muted {
   color: var(--text-muted);
@@ -195,18 +177,6 @@ button {
 .priority-low {
   background: #e3f2f0;
   color: #245f60;
-}
-.dark .priority-high {
-  background: #3d1a14;
-  color: #f4a08a;
-}
-.dark .priority-medium {
-  background: #2e2410;
-  color: #e0b96a;
-}
-.dark .priority-low {
-  background: #0e2826;
-  color: #6dd4cf;
 }
 .button {
   border: 1px solid var(--brand);
@@ -390,6 +360,10 @@ button {
   width: min(560px, 100%);
   max-height: calc(100vh - 32px);
   overflow: auto;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 28px 32px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
 }
 
 .live-badge {
@@ -408,10 +382,6 @@ button {
 .live-badge--on {
   background: #d1fae5;
   color: #065f46;
-}
-.dark .live-badge--on {
-  background: #0a2e1e;
-  color: #6dd4a8;
 }
 
 @media (max-width: 720px) {
@@ -451,4 +421,114 @@ button {
   font-weight: 600;
   min-width: 110px;
   text-align: center;
+}
+
+/* ─── Member avatars ─────────────────────────────────────────── */
+.member-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+}
+.member-avatar--sm {
+  width: 28px;
+  height: 28px;
+  font-size: 0.7rem;
+  border: 2px solid var(--bg-card);
+}
+.member-avatar--overflow {
+  background: var(--pill-bg);
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+.avatar-stack {
+  display: flex;
+  flex-direction: row-reverse;
+}
+.avatar-stack .member-avatar--sm {
+  margin-left: -8px;
+}
+.avatar-stack .member-avatar--sm:last-child {
+  margin-left: 0;
+}
+
+/* ─── Member list ────────────────────────────────────────────── */
+.member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+.member-row:hover {
+  border-color: var(--brand);
+}
+.member-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.member-name {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.member-role-badge {
+  flex-shrink: 0;
+}
+.member-actions {
+  flex-shrink: 0;
+}
+
+/* ─── Tab bar ────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 20px;
+  margin-top: 20px;
+}
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 8px 18px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  border-radius: 4px 4px 0 0;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.tab-btn:hover {
+  color: var(--text);
+}
+.tab-btn--active {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
 }

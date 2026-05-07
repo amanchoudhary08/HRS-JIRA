@@ -24,6 +24,9 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column(name = "emp_id", unique = true)
+    private String empId;
+
     @Column(nullable = false)
     private String password;
 

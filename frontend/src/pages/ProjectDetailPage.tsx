@@ -11,17 +11,21 @@ import { useProjectEvents } from "../hooks/useProjectEvents";
 import { Layout } from "../components/Layout";
 import { Field } from "../components/Field";
 import { TaskModal } from "../components/TaskModal";
+import { MemberList } from "../components/MemberList";
+import { InviteMemberModal } from "../components/InviteMemberModal";
 import { labelStatus } from "../utils/labelStatus";
 import { ArrowLeftIcon } from "../components/icons";
-import type { Project, SSETaskEvent, Task, User } from "../types";
+import type {
+  Project,
+  ProjectMember,
+  SSETaskEvent,
+  Task,
+  User,
+} from "../types";
 
-export function ProjectDetailPage({
-  onToggleDark,
-  dark,
-}: {
-  onToggleDark: () => void;
-  dark: boolean;
-}) {
+type ActiveTab = "tasks" | "members";
+
+export function ProjectDetailPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
   const navigate = useNavigate();
@@ -68,6 +72,9 @@ export function ProjectDetailPage({
   const [taskPage, setTaskPage] = useState(1);
   const [taskTotal, setTaskTotal] = useState(0);
   const TASK_LIMIT = 20;
+  const [activeTab, setActiveTab] = useState<ActiveTab>("tasks");
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [showInvite, setShowInvite] = useState(false);
 
   const sseConnected = useProjectEvents(id, token, (event: SSETaskEvent) => {
     if (event.type === "task_created") {
@@ -87,13 +94,17 @@ export function ProjectDetailPage({
     setLoading(true);
     try {
       const [detail, userData] = await Promise.all([
-        request<Project & { tasks: Task[] }>(`/projects/${id}`, { token }),
+        request<Project & { tasks: Task[]; members: ProjectMember[] }>(
+          `/projects/${id}`,
+          { token },
+        ),
         request<{ users: User[] }>("/users", { token }),
       ]);
       setProject(detail);
       setTasks(detail.tasks);
       setTaskTotal(detail.tasks.length);
       setUsers(userData.users);
+      setMembers(detail.members ?? []);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load project");
@@ -152,7 +163,7 @@ export function ProjectDetailPage({
       tasks.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)),
     );
     try {
-      const updated = await request<Task>(`/tasks/${task.id}`, {
+      const updated = await request<Task>(`/projects/${id}/tasks/${task.id}`, {
         method: "PATCH",
         token,
         body: { status: nextStatus },
@@ -183,7 +194,10 @@ export function ProjectDetailPage({
     const previous = tasks;
     setTasks(tasks.filter((t) => t.id !== taskId));
     try {
-      await request(`/tasks/${taskId}`, { method: "DELETE", token });
+      await request(`/projects/${id}/tasks/${taskId}`, {
+        method: "DELETE",
+        token,
+      });
     } catch (err) {
       setTasks(previous);
       setError(err instanceof Error ? err.message : "Could not delete task");
@@ -197,6 +211,33 @@ export function ProjectDetailPage({
       navigate("/projects");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete project");
+    }
+  }
+
+  async function changeRole(userId: string, role: ProjectMember["role"]) {
+    try {
+      const updated = await request<ProjectMember>(
+        `/projects/${id}/members/${userId}`,
+        { method: "PATCH", token, body: { role } },
+      );
+      setMembers((prev) =>
+        prev.map((m) => (m.user_id === userId ? updated : m)),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not change role");
+    }
+  }
+
+  async function removeMember(userId: string) {
+    if (!window.confirm("Remove this member from the project?")) return;
+    try {
+      await request(`/projects/${id}/members/${userId}`, {
+        method: "DELETE",
+        token,
+      });
+      setMembers((prev) => prev.filter((m) => m.user_id !== userId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove member");
     }
   }
 
@@ -246,7 +287,7 @@ export function ProjectDetailPage({
   }
 
   return (
-    <Layout onToggleDark={onToggleDark} dark={dark}>
+    <Layout>
       <Link
         to="/projects"
         style={{
@@ -346,141 +387,205 @@ export function ProjectDetailPage({
             </div>
           )}
           {error && <p className="error">{error}</p>}
-          <div className="card filters">
-            <Field label="Status filter">
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
+          {/* Tab switcher */}
+          <div className="tab-bar">
+            <button
+              className={`tab-btn${activeTab === "tasks" ? " tab-btn--active" : ""}`}
+              onClick={() => setActiveTab("tasks")}
+            >
+              Tasks
+            </button>
+            <button
+              className={`tab-btn${activeTab === "members" ? " tab-btn--active" : ""}`}
+              onClick={() => setActiveTab("members")}
+            >
+              Members
+              <span
+                className="pill"
+                style={{ marginLeft: 6, fontSize: "0.75rem" }}
               >
-                <option value="">All statuses</option>
-                <option value="todo">Todo</option>
-                <option value="in_progress">In progress</option>
-                <option value="done">Done</option>
-              </select>
-            </Field>
-            <Field label="Assignee filter">
-              <select
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
-              >
-                <option value="">All assignees</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
+                {members.length}
+              </span>
+            </button>
+          </div>
+
+          {/* ─── Tasks tab ─── */}
+          {activeTab === "tasks" && (
+            <>
+              <div className="card filters">
+                <Field label="Status filter">
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                  >
+                    <option value="">All statuses</option>
+                    <option value="todo">Todo</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="done">Done</option>
+                  </select>
+                </Field>
+                <Field label="Assignee filter">
+                  <select
+                    value={assignee}
+                    onChange={(e) => setAssignee(e.target.value)}
+                  >
+                    <option value="">All assignees</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <div style={{ height: 20 }} />
+              <div className="grid">
+                {(["todo", "in_progress", "done"] as const).map((key) => (
+                  <section
+                    className={`column${dragOverCol === key ? " column--drag-over" : ""}`}
+                    key={key}
+                    onDragOver={(e) => handleDragOver(e, key)}
+                    onDragLeave={() => setDragOverCol(null)}
+                    onDrop={(e) => handleDrop(e, key)}
+                  >
+                    <h3>
+                      {labelStatus(key)}{" "}
+                      <span className="pill">{grouped[key].length}</span>
+                    </h3>
+                    {grouped[key].length === 0 ? (
+                      <div className="empty column-empty">No tasks here.</div>
+                    ) : (
+                      grouped[key].map((task) => (
+                        <article
+                          className="card task-card"
+                          key={task.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, task.id)}
+                        >
+                          <div>
+                            <h3>{task.title}</h3>
+                            <p className="muted">
+                              {task.description || "No description."}
+                            </p>
+                          </div>
+                          <div className="row">
+                            <span className={`pill priority-${task.priority}`}>
+                              {task.priority}
+                            </span>
+                            <span className="pill">
+                              {users.find((u) => u.id === task.assignee_id)
+                                ?.name || "Unassigned"}
+                            </span>
+                          </div>
+                          {task.due_date && (
+                            <span className="muted">Due {task.due_date}</span>
+                          )}
+                          <div className="row">
+                            <select
+                              value={task.status}
+                              onChange={(e) =>
+                                optimisticStatus(
+                                  task,
+                                  e.target.value as Task["status"],
+                                )
+                              }
+                            >
+                              <option value="todo">Todo</option>
+                              <option value="in_progress">In progress</option>
+                              <option value="done">Done</option>
+                            </select>
+                            <button
+                              className="button secondary"
+                              onClick={() => setEditing(task)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="button danger"
+                              onClick={() => deleteTask(task.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </article>
+                      ))
+                    )}
+                  </section>
                 ))}
-              </select>
-            </Field>
-          </div>
-          <div style={{ height: 20 }} />
-          <div className="grid">
-            {(["todo", "in_progress", "done"] as const).map((key) => (
-              <section
-                className={`column${dragOverCol === key ? " column--drag-over" : ""}`}
-                key={key}
-                onDragOver={(e) => handleDragOver(e, key)}
-                onDragLeave={() => setDragOverCol(null)}
-                onDrop={(e) => handleDrop(e, key)}
-              >
-                <h3>
-                  {labelStatus(key)}{" "}
-                  <span className="pill">{grouped[key].length}</span>
-                </h3>
-                {grouped[key].length === 0 ? (
-                  <div className="empty column-empty">No tasks here.</div>
-                ) : (
-                  grouped[key].map((task) => (
-                    <article
-                      className="card task-card"
-                      key={task.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, task.id)}
-                    >
-                      <div>
-                        <h3>{task.title}</h3>
-                        <p className="muted">
-                          {task.description || "No description."}
-                        </p>
-                      </div>
-                      <div className="row">
-                        <span className={`pill priority-${task.priority}`}>
-                          {task.priority}
-                        </span>
-                        <span className="pill">
-                          {users.find((u) => u.id === task.assignee_id)?.name ||
-                            "Unassigned"}
-                        </span>
-                      </div>
-                      {task.due_date && (
-                        <span className="muted">Due {task.due_date}</span>
-                      )}
-                      <div className="row">
-                        <select
-                          value={task.status}
-                          onChange={(e) =>
-                            optimisticStatus(
-                              task,
-                              e.target.value as Task["status"],
-                            )
-                          }
-                        >
-                          <option value="todo">Todo</option>
-                          <option value="in_progress">In progress</option>
-                          <option value="done">Done</option>
-                        </select>
-                        <button
-                          className="button secondary"
-                          onClick={() => setEditing(task)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="button danger"
-                          onClick={() => deleteTask(task.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </article>
-                  ))
-                )}
-              </section>
-            ))}
-          </div>
-          {(showCreate || editing) && (
-            <TaskModal
+              </div>
+              {(showCreate || editing) && (
+                <TaskModal
+                  projectId={id!}
+                  token={token}
+                  task={editing}
+                  users={users}
+                  currentUser={user}
+                  onClose={() => {
+                    setShowCreate(false);
+                    setEditing(null);
+                  }}
+                  onSaved={upsertTask}
+                />
+              )}
+              {Math.ceil(taskTotal / TASK_LIMIT) > 1 && (
+                <div className="pagination" style={{ marginTop: 24 }}>
+                  <button
+                    className="button secondary"
+                    disabled={taskPage === 1}
+                    onClick={() => setTaskPage((p) => p - 1)}
+                  >
+                    ← Prev
+                  </button>
+                  <span className="pagination-info">
+                    Page {taskPage} of {Math.ceil(taskTotal / TASK_LIMIT)}
+                  </span>
+                  <button
+                    className="button secondary"
+                    disabled={taskPage >= Math.ceil(taskTotal / TASK_LIMIT)}
+                    onClick={() => setTaskPage((p) => p + 1)}
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ─── Members tab ─── */}
+          {activeTab === "members" && (
+            <div style={{ marginTop: 20 }}>
+              {(project?.owner_id === user?.id ||
+                members.some(
+                  (m) =>
+                    m.user_id === user?.id &&
+                    (m.role === "owner" || m.role === "admin"),
+                )) && (
+                <div style={{ marginBottom: 16 }}>
+                  <button
+                    className="button"
+                    onClick={() => setShowInvite(true)}
+                  >
+                    + Invite member
+                  </button>
+                </div>
+              )}
+              <MemberList
+                members={members}
+                currentUserId={user?.id ?? ""}
+                isOwner={project?.owner_id === user?.id}
+                onChangeRole={changeRole}
+                onRemove={removeMember}
+              />
+            </div>
+          )}
+
+          {showInvite && (
+            <InviteMemberModal
               projectId={id!}
               token={token}
-              task={editing}
-              users={users}
-              currentUser={user}
-              onClose={() => {
-                setShowCreate(false);
-                setEditing(null);
-              }}
-              onSaved={upsertTask}
+              onClose={() => setShowInvite(false)}
+              onInvited={(m) => setMembers((prev) => [...prev, m])}
             />
-          )}
-          {Math.ceil(taskTotal / TASK_LIMIT) > 1 && (
-            <div className="pagination" style={{ marginTop: 24 }}>
-              <button
-                className="button secondary"
-                disabled={taskPage === 1}
-                onClick={() => setTaskPage((p) => p - 1)}
-              >
-                ← Prev
-              </button>
-              <span className="pagination-info">
-                Page {taskPage} of {Math.ceil(taskTotal / TASK_LIMIT)}
-              </span>
-              <button
-                className="button secondary"
-                disabled={taskPage >= Math.ceil(taskTotal / TASK_LIMIT)}
-                onClick={() => setTaskPage((p) => p + 1)}
-              >
-                Next →
-              </button>
-            </div>
           )}
         </>
       ) : (

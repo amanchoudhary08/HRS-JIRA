@@ -59,7 +59,7 @@ export function TaskModal({
         due_date: dueDate || "",
       };
       const saved = task
-        ? await request<Task>(`/tasks/${task.id}`, {
+        ? await request<Task>(`/projects/${projectId}/tasks/${task.id}`, {
             method: "PATCH",
             token,
             body,

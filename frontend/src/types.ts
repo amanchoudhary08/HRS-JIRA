@@ -1,11 +1,21 @@
 export type User = { id: string; name: string; email: string };
 
+export type ProjectMember = {
+  project_id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  role: "owner" | "admin" | "member" | "viewer";
+  joined_at: string;
+};
+
 export type Project = {
   id: string;
   name: string;
   description: string;
   owner_id: string;
   created_at: string;
+  members?: ProjectMember[];
 };
 
 export type Task = {

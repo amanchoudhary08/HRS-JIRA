@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM maven:3.9-eclipse-temurin-25-alpine AS build
+FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /app
 COPY pom.xml .
 # Cache the Maven local repo across rebuilds — only re-downloads when pom.xml changes
@@ -7,9 +7,9 @@ RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline -q
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 mvn package -DskipTests -q
 
-FROM eclipse-temurin:25-jre-alpine
+FROM eclipse-temurin:17-jre
 WORKDIR /app
-RUN adduser -D -H appuser
+RUN useradd -r -s /bin/false appuser
 COPY --from=build /app/target/taskflow-api-0.0.1-SNAPSHOT.jar app.jar
 USER appuser
 EXPOSE 4000

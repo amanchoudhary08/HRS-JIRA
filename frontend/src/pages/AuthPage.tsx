@@ -8,8 +8,8 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const { login, register } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("test@example.com");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,7 +18,8 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (!email.includes("@")) return setError("Use a valid email address.");
+    if (mode === "register" && !email.includes("@"))
+      return setError("Use a valid email address.");
     if (password.length < 8)
       return setError("Password must be at least 8 characters.");
     if (mode === "register" && name.trim().length < 2)
@@ -61,9 +62,9 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
               <input value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
           )}
-          <Field label="Email">
+          <Field label="Email or Employee ID">
             <input
-              type="email"
+              type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />

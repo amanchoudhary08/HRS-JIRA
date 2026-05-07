@@ -1,17 +1,8 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { MoonIcon, SunIcon } from "./icons";
 
-export function Layout({
-  children,
-  onToggleDark,
-  dark,
-}: {
-  children: React.ReactNode;
-  onToggleDark: () => void;
-  dark: boolean;
-}) {
+export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   return (
     <div className="shell">
@@ -20,15 +11,7 @@ export function Layout({
           TaskFlow
         </Link>
         <div className="nav-actions">
-          <span>{user?.name}</span>
-          <button
-            aria-label="Toggle dark mode"
-            className="button secondary icon-btn"
-            title={dark ? "Switch to light mode" : "Switch to dark mode"}
-            onClick={onToggleDark}
-          >
-            {dark ? <SunIcon /> : <MoonIcon />}
-          </button>
+          <span className="underline">{user?.name}</span>
           <button className="button secondary" onClick={logout}>
             Logout
           </button>

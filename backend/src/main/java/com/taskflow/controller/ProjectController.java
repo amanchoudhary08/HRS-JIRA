@@ -1,10 +1,13 @@
 package com.taskflow.controller;
 
 import com.taskflow.dto.ProjectDto;
+import com.taskflow.dto.ProjectMemberDto;
 import com.taskflow.dto.TaskDto;
 import com.taskflow.entity.Project;
+import com.taskflow.entity.ProjectMember;
 import com.taskflow.entity.Task;
 import com.taskflow.entity.User;
+import com.taskflow.repository.ProjectMemberRepository;
 import com.taskflow.repository.ProjectRepository;
 import com.taskflow.repository.TaskRepository;
 import jakarta.validation.Valid;
@@ -18,6 +21,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/projects")
@@ -25,10 +29,14 @@ public class ProjectController {
 
     private final ProjectRepository projectRepo;
     private final TaskRepository taskRepo;
+    private final ProjectMemberRepository memberRepo;
 
-    public ProjectController(ProjectRepository projectRepo, TaskRepository taskRepo) {
+    public ProjectController(ProjectRepository projectRepo,
+                             TaskRepository taskRepo,
+                             ProjectMemberRepository memberRepo) {
         this.projectRepo = projectRepo;
         this.taskRepo = taskRepo;
+        this.memberRepo = memberRepo;
     }
 
     public record CreateProjectRequest(
@@ -48,7 +56,23 @@ public class ProjectController {
         PageRequest pr = PageRequest.of(page - 1, limit, Sort.by("createdAt").descending());
         Page<Project> result = projectRepo.findAccessibleByUser(user, pr);
 
-        List<ProjectDto> dtos = result.getContent().stream().map(ProjectDto::from).toList();
+        List<UUID> projectIds = result.getContent().stream().map(Project::getId).toList();
+
+        // Batch-fetch members for all returned projects in one query
+        Map<UUID, List<ProjectMemberDto>> membersByProject = Collections.emptyMap();
+        if (!projectIds.isEmpty()) {
+            membersByProject = memberRepo.findByProjectIdIn(projectIds).stream()
+                    .collect(Collectors.groupingBy(
+                            pm -> pm.getProject().getId(),
+                            Collectors.mapping(ProjectMemberDto::from, Collectors.toList())
+                    ));
+        }
+
+        Map<UUID, List<ProjectMemberDto>> finalMembersByProject = membersByProject;
+        List<ProjectDto> dtos = result.getContent().stream()
+                .map(p -> ProjectDto.withMembers(p, finalMembersByProject.getOrDefault(p.getId(), List.of())))
+                .toList();
+
         return ResponseEntity.ok(Map.of(
                 "projects", dtos,
                 "page", page,
@@ -67,6 +91,14 @@ public class ProjectController {
         p.setDescription(req.description() != null ? req.description().trim() : null);
         p.setOwner(user);
         p = projectRepo.save(p);
+
+        // Seed the creator as an 'owner' member
+        ProjectMember ownerMembership = new ProjectMember();
+        ownerMembership.setProject(p);
+        ownerMembership.setUser(user);
+        ownerMembership.setRole("owner");
+        memberRepo.save(ownerMembership);
+
         return ResponseEntity.status(HttpStatus.CREATED).body(ProjectDto.from(p));
     }
 
@@ -84,6 +116,8 @@ public class ProjectController {
         }
         List<Task> tasks = taskRepo.findTop1000ByProjectIdOrderByCreatedAtDesc(id);
         List<TaskDto> taskDtos = tasks.stream().map(TaskDto::from).toList();
+        List<ProjectMemberDto> members = memberRepo.findByProjectIdWithUser(id)
+                .stream().map(ProjectMemberDto::from).toList();
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("id", p.getId());
@@ -92,6 +126,7 @@ public class ProjectController {
         body.put("owner_id", p.getOwner().getId());
         body.put("created_at", p.getCreatedAt());
         body.put("tasks", taskDtos);
+        body.put("members", members);
         return ResponseEntity.ok(body);
     }
 

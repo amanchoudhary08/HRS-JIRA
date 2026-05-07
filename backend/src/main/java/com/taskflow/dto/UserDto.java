@@ -4,8 +4,8 @@ import com.taskflow.entity.User;
 
 import java.util.UUID;
 
-public record UserDto(UUID id, String name, String email) {
+public record UserDto(UUID id, String name, String email, String empId) {
     public static UserDto from(User u) {
-        return new UserDto(u.getId(), u.getName(), u.getEmail());
+        return new UserDto(u.getId(), u.getName(), u.getEmail(), u.getEmpId());
     }
 }

@@ -4,15 +4,42 @@ import { request } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { Layout } from "../components/Layout";
 import { Field } from "../components/Field";
-import type { Project } from "../types";
+import type { Project, ProjectMember } from "../types";
 
-export function ProjectsPage({
-  onToggleDark,
-  dark,
-}: {
-  onToggleDark: () => void;
-  dark: boolean;
-}) {
+function avatarInitials(name: string): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function MemberAvatars({ members }: { members: ProjectMember[] }) {
+  const visible = members.slice(0, 5);
+  const overflow = members.length - visible.length;
+  return (
+    <div className="avatar-stack">
+      {visible.map((m) => (
+        <div
+          className="member-avatar member-avatar--sm"
+          key={m.user_id}
+          title={m.user_name}
+        >
+          {avatarInitials(m.user_name)}
+        </div>
+      ))}
+      {overflow > 0 && (
+        <div
+          className="member-avatar member-avatar--sm member-avatar--overflow"
+          title={`+${overflow} more`}
+        >
+          +{overflow}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ProjectsPage() {
   const { token } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +93,7 @@ export function ProjectsPage({
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
   return (
-    <Layout onToggleDark={onToggleDark} dark={dark}>
+    <Layout>
       <div className="toolbar">
         <div>
           <h1 className="title">Projects</h1>
@@ -113,7 +140,21 @@ export function ProjectsPage({
                 <p className="muted">
                   {project.description || "No description yet."}
                 </p>
-                <span className="pill">Open</span>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginTop: 8,
+                  }}
+                >
+                  {project.members && project.members.length > 0 ? (
+                    <MemberAvatars members={project.members} />
+                  ) : (
+                    <span />
+                  )}
+                  <span className="pill">Open</span>
+                </div>
               </Link>
             ))}
           </div>

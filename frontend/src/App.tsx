@@ -6,7 +6,6 @@ import {
   Routes,
 } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
-import { useDarkMode } from "./hooks/useDarkMode";
 import { Protected } from "./components/Protected";
 import { AuthPage } from "./pages/AuthPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
@@ -14,9 +13,8 @@ import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 import "./main.css";
 
 function App() {
-  const [dark, toggleDark, resetDark] = useDarkMode();
   return (
-    <AuthProvider onLogout={resetDark}>
+    <AuthProvider>
       <Router>
         <Routes>
           <Route path="/" element={<Navigate to="/projects" replace />} />
@@ -26,7 +24,7 @@ function App() {
             path="/projects"
             element={
               <Protected>
-                <ProjectsPage onToggleDark={toggleDark} dark={dark} />
+                <ProjectsPage />
               </Protected>
             }
           />
@@ -34,7 +32,7 @@ function App() {
             path="/projects/:id"
             element={
               <Protected>
-                <ProjectDetailPage onToggleDark={toggleDark} dark={dark} />
+                <ProjectDetailPage />
               </Protected>
             }
           />

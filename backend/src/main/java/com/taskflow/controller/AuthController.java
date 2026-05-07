@@ -63,8 +63,11 @@ public class AuthController {
 
     @PostMapping("/auth/login")
     public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody LoginRequest req) {
-        String email = req.email().trim().toLowerCase();
-        User user = userRepo.findByEmail(email).orElse(null);
+        String identifier = req.email().trim().toLowerCase();
+        // Try email first, then emp_id
+        User user = userRepo.findByEmail(identifier)
+                .or(() -> userRepo.findByEmpId(identifier))
+                .orElse(null);
         if (user == null || !passwordEncoder.matches(req.password(), user.getPassword())) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "unauthorized"));
         }

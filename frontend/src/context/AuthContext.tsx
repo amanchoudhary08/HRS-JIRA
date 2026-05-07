@@ -10,13 +10,7 @@ export function useAuth() {
   return ctx;
 }
 
-export function AuthProvider({
-  children,
-  onLogout,
-}: {
-  children: React.ReactNode;
-  onLogout: () => void;
-}) {
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState(() =>
     localStorage.getItem("taskflow_token"),
   );
@@ -54,10 +48,8 @@ export function AuthProvider({
       logout: () => {
         localStorage.removeItem("taskflow_token");
         localStorage.removeItem("taskflow_user");
-        localStorage.removeItem("taskflow_dark");
         setToken(null);
         setUser(null);
-        onLogout();
       },
     }),
     [token, user],
