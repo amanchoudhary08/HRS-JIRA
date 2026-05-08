@@ -88,7 +88,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
               </button>
             </div>
           </Field>
-          <button className="button" disabled={loading}>
+          <button className="button" type="submit" disabled={loading}>
             {loading ? "Working..." : mode === "login" ? "Log in" : "Register"}
           </button>
           <Link to={mode === "login" ? "/register" : "/login"}>

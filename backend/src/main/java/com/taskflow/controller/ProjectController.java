@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -177,6 +178,8 @@ public class ProjectController {
         if (!projectRepo.existsAccessibleByUserAndId(id, user.getId())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "not found"));
         }
+
+        // --- by_status ---
         Map<String, Integer> byStatus = new LinkedHashMap<>();
         byStatus.put("todo", 0);
         byStatus.put("in_progress", 0);
@@ -185,6 +188,7 @@ public class ProjectController {
             byStatus.put(row[0].toString(), ((Number) row[1]).intValue());
         }
 
+        // --- by_assignee ---
         List<Map<String, Object>> byAssignee = new ArrayList<>();
         for (Object[] row : taskRepo.countByAssigneeForProject(id)) {
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -193,6 +197,55 @@ public class ProjectController {
             entry.put("count", ((Number) row[2]).intValue());
             byAssignee.add(entry);
         }
-        return ResponseEntity.ok(Map.of("by_status", byStatus, "by_assignee", byAssignee));
+
+        // --- by_type ---
+        List<Map<String, Object>> byType = new ArrayList<>();
+        for (Object[] row : taskRepo.countByTypeForProject(id)) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("type", row[0] != null ? row[0].toString() : "task");
+            entry.put("count", ((Number) row[1]).intValue());
+            byType.add(entry);
+        }
+
+        // --- by_sprint ---
+        List<Map<String, Object>> bySprint = new ArrayList<>();
+        for (Object[] row : taskRepo.countBySprintForProject(id)) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("sprint", row[0] != null ? row[0].toString() : "Backlog");
+            entry.put("count", ((Number) row[1]).intValue());
+            bySprint.add(entry);
+        }
+
+        // --- daily_done (last 14 days) ---
+        LocalDate today = LocalDate.now();
+        LocalDate since = today.minusDays(13);
+        Map<String, Integer> dailyMap = new LinkedHashMap<>();
+        for (int i = 0; i <= 13; i++) {
+            dailyMap.put(since.plusDays(i).toString(), 0);
+        }
+        for (Object[] row : taskRepo.countDonePerDaySince(id, since)) {
+            dailyMap.put(row[0].toString(), ((Number) row[1]).intValue());
+        }
+        List<Map<String, Object>> dailyDone = new ArrayList<>();
+        for (Map.Entry<String, Integer> e : dailyMap.entrySet()) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("date", e.getKey());
+            entry.put("count", e.getValue());
+            dailyDone.add(entry);
+        }
+
+        // --- totals & overdue ---
+        int total = byStatus.values().stream().mapToInt(Integer::intValue).sum();
+        long overdue = taskRepo.countOverdueForProject(id, today);
+
+        return ResponseEntity.ok(Map.of(
+                "by_status", byStatus,
+                "by_assignee", byAssignee,
+                "by_type", byType,
+                "by_sprint", bySprint,
+                "daily_done", dailyDone,
+                "total", total,
+                "overdue", overdue
+        ));
     }
 }

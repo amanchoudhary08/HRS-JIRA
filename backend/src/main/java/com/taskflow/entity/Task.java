@@ -53,6 +53,20 @@ public class Task {
     @Column(name = "due_date")
     private LocalDate dueDate;
 
+    @Column(nullable = false)
+    private String type = "task";
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private Task parent;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sprint_id")
+    private Sprint sprint;
+
+    @Column(nullable = false)
+    private int position = 0;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;

@@ -149,6 +149,33 @@ button {
   cursor: grabbing;
   opacity: 0.7;
 }
+.task-card button,
+.task-card .type-icon {
+  cursor: pointer;
+}
+.type-icon {
+  position: relative;
+}
+.type-icon::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e2623;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0s;
+}
+.type-icon:hover::after {
+  opacity: 1;
+}
 .column h3 {
   margin: 0;
 }
@@ -364,6 +391,153 @@ button {
   border-radius: 12px;
   padding: 28px 32px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+}
+
+/* ── Task Detail Drawer ─────────────────────────────────────────────────── */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 20;
+}
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(600px, 100vw);
+  background: var(--bg-card);
+  box-shadow: -4px 0 32px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  z-index: 21;
+  overflow: hidden;
+}
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.drawer-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.drawer-section-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.comment-item {
+  display: flex;
+  gap: 10px;
+}
+.comment-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+.comment-bubble {
+  flex: 1;
+  background: var(--pill-bg);
+  border-radius: 8px;
+  padding: 10px 12px;
+  position: relative;
+}
+.comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.comment-author {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.comment-time {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+.comment-body {
+  font-size: 0.9rem;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.comment-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.comment-action-btn {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.comment-action-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+.comment-action-btn.danger:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.comment-form textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-input);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text);
+  resize: vertical;
+  font-size: 0.9rem;
+}
+.comment-form textarea:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+.drawer-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
 }
 
 .live-badge {

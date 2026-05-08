@@ -64,6 +64,7 @@
 | Frontend framework | React 18                                         |
 | Build tool         | Vite                                             |
 | Routing            | React Router v6                                  |
+| Drag-and-drop      | @dnd-kit/core + @dnd-kit/sortable                |
 | Styling            | Plain CSS with CSS custom properties (variables) |
 | Containerization   | Docker + Docker Compose                          |
 
@@ -101,8 +102,10 @@
 ┌─────────────────────────────┐
 │  PostgreSQL  (port 5432)    │
 │  tables: users, projects,   │
-│          tasks,             │
-│          project_members    │
+│          tasks, sprints,    │
+│          project_members,   │
+│          comments,          │
+│          activity_events    │
 └─────────────────────────────┘
 ```
 
@@ -114,7 +117,7 @@ The backend lives in `backend/src/main/java/com/taskflow/`.
 
 ### 4.1 Entities & Database Schema
 
-Three core JPA entities map 1:1 to PostgreSQL tables.
+Core JPA entities map 1:1 to PostgreSQL tables.
 
 ---
 
@@ -177,9 +180,13 @@ CREATE TABLE tasks (
   description text,
   status      task_status   NOT NULL DEFAULT 'todo',
   priority    task_priority NOT NULL DEFAULT 'medium',
+  type        text          NOT NULL DEFAULT 'task',
   project_id  uuid          NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   assignee_id uuid          REFERENCES users(id) ON DELETE SET NULL,
   created_by  uuid          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  parent_id   uuid          REFERENCES tasks(id) ON DELETE SET NULL,
+  sprint_id   uuid          REFERENCES sprints(id) ON DELETE SET NULL,
+  position    integer       NOT NULL DEFAULT 0,
   due_date    date,
   created_at  timestamptz   NOT NULL DEFAULT now(),
   updated_at  timestamptz   NOT NULL DEFAULT now()
@@ -194,12 +201,45 @@ CREATE TABLE tasks (
 | `description` | `String` | Optional |
 | `status` | `TaskStatus` (enum) | todo / in_progress / done; default = todo |
 | `priority` | `TaskPriority` (enum) | low / medium / high; default = medium |
+| `type` | `String` | task / bug / story / epic; default = task |
 | `project` | `Project` | ManyToOne, lazy |
 | `assignee` | `User` | ManyToOne, lazy, nullable |
 | `createdBy` | `User` | ManyToOne, lazy |
-| `dueDate` | `LocalDate` | Optional |
+| `parent` | `Task` | Self-referencing ManyToOne, nullable (subtask parent) |
+| `sprint` | `Sprint` | ManyToOne, lazy, nullable — which sprint this task belongs to |
+| `position` | `int` | Display order within sprint/column; default = 0 |
+| `dueDate` | `LocalDate` | **Required**; must not be in the past |
 | `createdAt` | `OffsetDateTime` | Auto on insert |
 | `updatedAt` | `OffsetDateTime` | Auto on update |
+
+---
+
+#### `sprints` table
+
+```sql
+CREATE TABLE sprints (
+  id         uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id uuid        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name       text        NOT NULL,
+  goal       text,
+  start_date date,
+  end_date   date,
+  status     text        NOT NULL DEFAULT 'planning',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+**Java class:** `entity/Sprint.java`
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `UUID` | Auto-generated UUID |
+| `project` | `Project` | ManyToOne, lazy |
+| `name` | `String` | Required |
+| `goal` | `String` | Optional |
+| `startDate` | `LocalDate` | Optional in DB; **required and ≥ today** via frontend validation |
+| `endDate` | `LocalDate` | Optional in DB; **required and ≥ startDate** via frontend validation |
+| `status` | `String` | `planning` / `active` / `completed`; default = `planning` |
+| `createdAt` | `OffsetDateTime` | Auto on insert |
 
 **Database indices:**
 
@@ -208,6 +248,7 @@ CREATE TABLE tasks (
 - `idx_tasks_assignee_id` → `tasks(assignee_id)`
 - `idx_tasks_created_by` → `tasks(created_by)`
 - `idx_tasks_status` → `tasks(status)`
+- `idx_tasks_parent_id` → `tasks(parent_id)`
 
 ---
 
@@ -239,16 +280,45 @@ CREATE TABLE project_members (
 
 ---
 
+#### `activity_events` table
+
+```sql
+CREATE TABLE activity_events (
+  id         uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id uuid        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  task_id    uuid        REFERENCES tasks(id)    ON DELETE SET NULL,
+  actor_id   uuid        REFERENCES users(id)    ON DELETE SET NULL,
+  type       text        NOT NULL,
+  payload    jsonb       NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+**Java class:** `entity/ActivityEvent.java`
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `UUID` | Auto-generated UUID |
+| `project` | `Project` | ManyToOne, lazy — which project this event belongs to |
+| `task` | `Task` | ManyToOne, lazy, nullable — specific task if event is task-scoped |
+| `actor` | `User` | ManyToOne, lazy — the user who performed the action |
+| `type` | `String` | Event type string (see event types below) |
+| `payload` | `Map<String,Object>` | JSONB — arbitrary key/value context for the event |
+| `createdAt` | `OffsetDateTime` | Auto-set on insert |
+
+---
+
 ### 4.2 DTOs
 
 Data Transfer Objects define what the API returns (never raw entities).
 
-| DTO                | Fields                                                                                                                          |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `UserDto`          | `id`, `name`, `email`                                                                                                           |
-| `ProjectDto`       | `id`, `name`, `description`, `ownerId`, `createdAt`, `members` (optional — omitted when null)                                   |
-| `ProjectMemberDto` | `projectId`, `userId`, `userName`, `userEmail`, `role`, `joinedAt`                                                              |
-| `TaskDto`          | `id`, `title`, `description`, `status`, `priority`, `projectId`, `assigneeId`, `createdBy`, `dueDate`, `createdAt`, `updatedAt` |
+| DTO                | Fields                                                                                                                                                                                             |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UserDto`          | `id`, `name`, `email`                                                                                                                                                                              |
+| `ProjectDto`       | `id`, `name`, `description`, `ownerId`, `createdAt`, `members` (optional — omitted when null)                                                                                                      |
+| `ProjectMemberDto` | `projectId`, `userId`, `userName`, `userEmail`, `role`, `joinedAt`                                                                                                                                 |
+| `TaskDto`          | `id`, `title`, `description`, `status`, `priority`, `type`, `projectId`, `assigneeId`, `createdBy`, `parentId`, `sprintId`, `position`, `dueDate`, `createdAt`, `updatedAt`                        |
+| `SprintDto`        | `id`, `projectId`, `name`, `goal`, `startDate`, `endDate`, `status`, `createdAt`                                                                                                                   |
+| `ActivityEventDto` | `id`, `projectId`, `taskId`, `actorId`, `actorName`, `type`, `payload` (`Map<String,Object>`), `createdAt` — built from in-memory values (no lazy re-fetch) to avoid `LazyInitializationException` |
 
 All are Java `record` types (immutable). `ProjectDto` exposes two factories: `from(Project)` (no members) and `withMembers(Project, List<ProjectMemberDto>)` (includes members).
 
@@ -285,6 +355,16 @@ Spring Data JPA repositories with custom JPQL queries.
 - `countByStatusForProject(UUID)` — Stats: group by status
 - `countByAssigneeForProject(UUID)` — Stats: group by assignee (with names)
 - `findByIdAndProjectId(UUID taskId, UUID projectId)` — Safe task lookup within project
+- `findByProjectIdAndParentId(UUID projectId, UUID parentId)` — All direct subtasks of a task
+- `countByTypeForProject(UUID)` — Stats: count per task type (task/bug/story/epic)
+- `countBySprintForProject(UUID)` — Stats: count per sprint name (null sprint → "Backlog"); top-level tasks only
+- `countDonePerDaySince(UUID projectId, LocalDate since)` — Native query: count tasks closed (status=done) per day since a given date; used for 14-day burndown
+- `countOverdueForProject(UUID projectId, LocalDate today)` — Count tasks where `due_date < today` and `status != done`
+
+#### `ActivityEventRepository`
+
+- `findByProjectIdOrderByCreatedAtDesc(UUID projectId, Pageable)` — Project-level activity feed, newest-first; JOIN FETCH actor
+- `findByTaskIdOrderByCreatedAtDesc(UUID taskId)` — Task-scoped activity feed; JOIN FETCH actor
 
 ---
 
@@ -310,14 +390,14 @@ Base URL: `http://localhost:4000`
 
 #### `ProjectController` — `/projects`
 
-| Method   | Path                   | Auth       | Request/Params            | Response                                                                     |
-| -------- | ---------------------- | ---------- | ------------------------- | ---------------------------------------------------------------------------- |
-| `GET`    | `/projects`            | Required   | `?page=1&limit=20`        | `200 { projects[], page, limit, total }` (each project includes `members[]`) |
-| `POST`   | `/projects`            | Required   | `{ name, description? }`  | `201 ProjectDto` (also seeds owner into `project_members`)                   |
-| `GET`    | `/projects/{id}`       | Required   | —                         | `200 { ...ProjectDto, tasks[], members[] }`                                  |
-| `PATCH`  | `/projects/{id}`       | Owner only | `{ name?, description? }` | `200 ProjectDto`                                                             |
-| `DELETE` | `/projects/{id}`       | Owner only | —                         | `204 No Content`                                                             |
-| `GET`    | `/projects/{id}/stats` | Required   | —                         | `200 { by_status[], by_assignee[] }`                                         |
+| Method   | Path                   | Auth       | Request/Params            | Response                                                                                 |
+| -------- | ---------------------- | ---------- | ------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`    | `/projects`            | Required   | `?page=1&limit=20`        | `200 { projects[], page, limit, total }` (each project includes `members[]`)             |
+| `POST`   | `/projects`            | Required   | `{ name, description? }`  | `201 ProjectDto` (also seeds owner into `project_members`)                               |
+| `GET`    | `/projects/{id}`       | Required   | —                         | `200 { ...ProjectDto, tasks[], members[] }`                                              |
+| `PATCH`  | `/projects/{id}`       | Owner only | `{ name?, description? }` | `200 ProjectDto`                                                                         |
+| `DELETE` | `/projects/{id}`       | Owner only | —                         | `204 No Content`                                                                         |
+| `GET`    | `/projects/{id}/stats` | Required   | —                         | `200 { total, overdue, by_status, by_assignee[], by_type[], by_sprint[], daily_done[] }` |
 
 **Authorization rules:**
 
@@ -347,22 +427,81 @@ Base URL: `http://localhost:4000`
 
 #### `TaskController` — `/projects/{projectId}/tasks`
 
-| Method   | Path                            | Auth                   | Request/Params                                                        | Response                              |
-| -------- | ------------------------------- | ---------------------- | --------------------------------------------------------------------- | ------------------------------------- |
-| `GET`    | `/projects/{id}/tasks`          | Required               | `?status=&assignee=&page=1&limit=20`                                  | `200 { tasks[], page, limit, total }` |
-| `POST`   | `/projects/{id}/tasks`          | Required               | `{ title, description?, status?, priority?, assigneeId?, dueDate? }`  | `201 TaskDto`                         |
-| `PATCH`  | `/projects/{id}/tasks/{taskId}` | Owner/creator/assignee | `{ title?, description?, status?, priority?, assigneeId?, dueDate? }` | `200 TaskDto`                         |
-| `DELETE` | `/projects/{id}/tasks/{taskId}` | Owner or creator       | —                                                                     | `204 No Content`                      |
+| Method   | Path                                     | Auth                   | Request/Params                                                                                     | Response                              |
+| -------- | ---------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `GET`    | `/projects/{id}/tasks`                   | Required               | `?status=&assignee=&page=1&limit=20`                                                               | `200 { tasks[], page, limit, total }` |
+| `POST`   | `/projects/{id}/tasks`                   | Required               | `{ title, description?, status?, priority?, type?, parentId?, assigneeId?, sprintId?, dueDate }`   | `201 TaskDto`                         |
+| `PATCH`  | `/projects/{id}/tasks/{taskId}`          | Owner/creator/assignee | `{ title?, description?, status?, priority?, type?, parentId?, assigneeId?, sprintId?, dueDate? }` | `200 TaskDto`                         |
+| `DELETE` | `/projects/{id}/tasks/{taskId}`          | Owner or creator       | —                                                                                                  | `204 No Content`                      |
+| `GET`    | `/projects/{id}/tasks/{taskId}/subtasks` | Required               | —                                                                                                  | `200 { subtasks: TaskDto[] }`         |
+| `PATCH`  | `/projects/{id}/tasks/{taskId}/position` | Required               | `{ status?, position?, sprintId? }`                                                                | `200 TaskDto`                         |
 
 **Validation:**
 
 - `title` — Required on creation
 - `status` — One of: `todo`, `in_progress`, `done`
 - `priority` — One of: `low`, `medium`, `high`
-- `dueDate` — ISO format `YYYY-MM-DD`
+- `type` — One of: `task`, `bug`, `story`, `epic`; defaults to `task`
+- `parentId` — Must reference a task in the same project that is itself not a subtask (max 1 level of nesting)
+- `dueDate` — ISO format `YYYY-MM-DD`; **required on creation**; must not be before today
 - `assigneeId` — Valid UUID referencing an existing user
+- `sprintId` — Optional UUID referencing a sprint in the same project
 
-**SSE side effects:** Every `POST`, `PATCH`, and `DELETE` on a task triggers an SSE broadcast (`task_created`, `task_updated`, or `task_deleted`) to all clients subscribed to that project.
+**SSE side effects:** Every `POST`, `PATCH`, and `DELETE` on a task triggers:
+
+1. An SSE broadcast (`task_created`, `task_updated`, `task_deleted`, or `task_moved`) to all clients subscribed to that project
+2. One or more `activity_created` SSE events describing exactly what changed (see activity event types below)
+
+**Activity events emitted by `TaskController`:**
+| Activity event type | When triggered | Payload fields |
+|---|---|---|
+| `task_created` | New task saved | `title`, `type` |
+| `subtask_created` | New task saved with a `parentId` — logged against the **parent** task | `title`, `type` |
+| `title_changed` | Title was modified | `title`, `from`, `to` |
+| `status_changed` | Status was modified | `title`, `from`, `to` |
+| `priority_changed` | Priority was modified | `title`, `from`, `to` |
+| `type_changed` | Type was modified | `title`, `from`, `to` |
+| `assignee_changed` | Assignee added, changed, or removed | `title`, `from`, `to` |
+| `due_date_changed` | Due date added, changed, or removed | `title`, `from`, `to` |
+| `sprint_changed` | Sprint assignment added, changed, or removed | `title`, `from`, `to` |
+| `task_deleted` | Task deleted | `title` |
+
+> **Lazy-loading fix:** Old `assignee`/`sprint` values are captured using proxy IDs (`task.getAssignee().getId()`) and then looked up via `userRepo`/`sprintRepo` **before** `taskRepo.save()` mutates the entity. New values are looked up the same way **after** `save()`. This avoids `LazyInitializationException` caused by `open-in-view: false` in `application.yml`.
+
+---
+
+#### `SprintController` — `/projects/{projectId}/sprints`
+
+| Method   | Path                                               | Auth          | Request Body                                     | Response                        |
+| -------- | -------------------------------------------------- | ------------- | ------------------------------------------------ | ------------------------------- |
+| `GET`    | `/projects/{id}/sprints`                           | Required      | —                                                | `200 { sprints: SprintDto[] }`  |
+| `POST`   | `/projects/{id}/sprints`                           | Owner / Admin | `{ name, goal?, startDate, endDate }`            | `201 SprintDto`                 |
+| `PATCH`  | `/projects/{id}/sprints/{sprintId}`                | Owner / Admin | `{ name?, goal?, startDate?, endDate?, status?}` | `200 SprintDto`                 |
+| `DELETE` | `/projects/{id}/sprints/{sprintId}`                | Owner / Admin | —                                                | `204 No Content`                |
+| `POST`   | `/projects/{id}/sprints/{sprintId}/tasks/{taskId}` | Owner / Admin | —                                                | `200 TaskDto` (task assigned)   |
+| `DELETE` | `/projects/{id}/sprints/{sprintId}/tasks/{taskId}` | Owner / Admin | —                                                | `200 TaskDto` (task unassigned) |
+
+**Status transitions:**
+
+- `planning` → `active` (start sprint): only one sprint may be active per project at a time
+- `active` → `completed` (complete sprint)
+
+**SSE side effects:** `PATCH` with `status: active` publishes `sprint_started`; `status: completed` publishes `sprint_completed`; task assignment/unassignment publishes `task_moved`.
+
+---
+
+#### `CommentController` — `/projects/{projectId}/tasks/{taskId}/comments`
+
+| Method   | Path                                                 | Auth           | Request Body | Response                         |
+| -------- | ---------------------------------------------------- | -------------- | ------------ | -------------------------------- |
+| `GET`    | `/projects/{id}/tasks/{taskId}/comments`             | Required       | —            | `200 { comments: CommentDto[] }` |
+| `POST`   | `/projects/{id}/tasks/{taskId}/comments`             | Required       | `{ body }`   | `201 CommentDto`                 |
+| `PATCH`  | `/projects/{id}/tasks/{taskId}/comments/{commentId}` | Author only    | `{ body }`   | `200 CommentDto`                 |
+| `DELETE` | `/projects/{id}/tasks/{taskId}/comments/{commentId}` | Author / Owner | —            | `204 No Content`                 |
+
+**SSE side effects:** `POST` publishes `comment_added`; `DELETE` publishes `comment_deleted`.
+
+> **Bug fix:** `PATCH` re-fetches the saved entity via `findByIdWithDetails` after `save()` to eagerly load `task → project` and `author` associations before passing to `CommentDto.from()`, preventing a lazy-loading 500 error.
 
 ---
 
@@ -376,6 +515,17 @@ Base URL: `http://localhost:4000`
 - Sends an initial "connected" comment immediately
 - Streams live events: `task_created`, `task_updated`, `task_deleted`
 - Emitter has no timeout (long-lived connection)
+
+---
+
+#### `ActivityController` — `/projects/{projectId}/activity`
+
+| Method | Path                                     | Auth     | Params      | Response                               |
+| ------ | ---------------------------------------- | -------- | ----------- | -------------------------------------- |
+| `GET`  | `/projects/{id}/activity`                | Required | `?limit=50` | `200 { activity: ActivityEventDto[] }` |
+| `GET`  | `/projects/{id}/tasks/{taskId}/activity` | Required | —           | `200 { activity: ActivityEventDto[] }` |
+
+Events are ordered newest-first. The project feed shows all events across the project; the task feed shows only events for a specific task.
 
 ---
 
@@ -433,6 +583,31 @@ Returns `200 { status: "ok" }` — used by Docker healthchecks.
 | `task_created` | `POST /tasks` | Full `TaskDto` |
 | `task_updated` | `PATCH /tasks/{id}` | Full `TaskDto` |
 | `task_deleted` | `DELETE /tasks/{id}` | `{ id, project_id }` |
+| `task_moved` | `PATCH /tasks/{id}/position` or sprint task assignment | Full `TaskDto` |
+| `sprint_started` | `PATCH /sprints/{id}` with `status: active` | Full `SprintDto` |
+| `sprint_completed` | `PATCH /sprints/{id}` with `status: completed` | Full `SprintDto` |
+| `comment_added` | `POST /comments` | Full `CommentDto` |
+| `comment_deleted` | `DELETE /comments/{id}` | `{ id, task_id }` |
+| `activity_created` | Any mutating operation in any controller | Full `ActivityEventDto` |
+| `member_added` | `POST /members` | `{ userName, role }` |
+| `member_removed` | `DELETE /members/{userId}` | `{ userName }` |
+| `role_changed` | `PATCH /members/{userId}` | `{ userName, role }` |
+
+**`ActivityService`** (`service/ActivityService.java`)
+
+Centralised service injected into all mutating controllers:
+
+```java
+activityService.log(projectId, taskId, actorId, type, payload);
+// or without payload:
+activityService.log(projectId, taskId, actorId, type);
+// payload builder helper:
+ActivityService.payload("title", "task1", "from", "todo", "to", "in_progress");
+```
+
+- Saves an `ActivityEvent` row to the DB
+- Builds `ActivityEventDto` from in-memory values (never re-fetches — avoids lazy-loading errors)
+- Broadcasts `activity_created` SSE to all project subscribers
 
 ---
 
@@ -463,6 +638,54 @@ Migrations live in `backend/src/main/resources/db/migration/`.
 - Creates the `project_members` table with `UNIQUE (project_id, user_id)` constraint
 - Adds indices `idx_project_members_project_id` and `idx_project_members_user_id`
 - Seeds all existing projects' owners into the table with role `owner`
+
+**V4\_\_emp_id.sql** — Employee ID column additions
+
+**V5\_\_comments.sql**
+
+- Creates the `comments` table (task comments with author, body, timestamps)
+- Adds index `idx_comments_task_id`
+
+**V6\_\_task_types.sql**
+
+- Adds `type text NOT NULL DEFAULT 'task'` column to `tasks` — values: `task`, `bug`, `story`, `epic`
+- Adds `parent_id uuid REFERENCES tasks(id) ON DELETE SET NULL` — self-referencing FK for subtask hierarchy (max 1 level)
+- Adds index `idx_tasks_parent_id`
+
+**V7\_\_sprints.sql**
+
+- Creates the `sprints` table:
+  ```sql
+  CREATE TABLE sprints (
+    id         uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id uuid        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name       text        NOT NULL,
+    goal       text,
+    start_date date,
+    end_date   date,
+    status     text        NOT NULL DEFAULT 'planning',
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  ```
+- Adds `sprint_id uuid REFERENCES sprints(id) ON DELETE SET NULL` column to `tasks`
+- Adds `position integer NOT NULL DEFAULT 0` column to `tasks` (for ordering within a sprint/column)
+- Adds index `idx_sprints_project_id`, `idx_tasks_sprint_id`
+
+**V8\_\_activity_log.sql**
+
+- Creates the `activity_events` table:
+  ```sql
+  CREATE TABLE activity_events (
+    id         uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id uuid        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    task_id    uuid        REFERENCES tasks(id)    ON DELETE SET NULL,
+    actor_id   uuid        REFERENCES users(id)    ON DELETE SET NULL,
+    type       text        NOT NULL,
+    payload    jsonb       NOT NULL DEFAULT '{}',
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  ```
+- Adds indices `idx_activity_project_id` and `idx_activity_task_id`
 
 ---
 
@@ -509,6 +732,16 @@ Key dependencies from `pom.xml`:
 | `jjwt-api/impl/jackson`          | 0.12.6  | JWT creation & parsing     |
 | `lombok`                         | 1.18.46 | Boilerplate reduction      |
 
+**Frontend npm packages (key additions beyond React/Vite):**
+
+| Package              | Version | Purpose                       |
+| -------------------- | ------- | ----------------------------- |
+| `react-router-dom`   | 6.x     | Client-side routing           |
+| `@dnd-kit/core`      | 6.x     | Drag-and-drop primitives      |
+| `@dnd-kit/sortable`  | 10.x    | Sortable lists/columns        |
+| `@dnd-kit/utilities` | 3.x     | DnD helper utilities          |
+| `recharts`           | 2.x     | SVG chart library (Dashboard) |
+
 ---
 
 ## 5. Frontend — React / TypeScript
@@ -540,15 +773,30 @@ type Project = {
   members?: ProjectMember[]; // present in list & detail responses
 };
 
+type Sprint = {
+  id: string;
+  project_id: string;
+  name: string;
+  goal: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  status: "planning" | "active" | "completed";
+  created_at: string;
+};
+
 type Task = {
   id: string;
   title: string;
   description: string;
   status: "todo" | "in_progress" | "done";
   priority: "low" | "medium" | "high";
+  type: "task" | "bug" | "story" | "epic";
   project_id: string;
   assignee_id: string | null;
   created_by: string;
+  parent_id: string | null;
+  sprint_id: string | null;
+  position: number;
   due_date: string | null;
   created_at: string;
   updated_at: string;
@@ -557,7 +805,32 @@ type Task = {
 type SSETaskEvent =
   | { type: "task_created"; data: Task }
   | { type: "task_updated"; data: Task }
-  | { type: "task_deleted"; data: { id: string; project_id: string } };
+  | { type: "task_deleted"; data: { id: string; project_id: string } }
+  | { type: "task_moved"; data: Task }
+  | { type: "sprint_started"; data: Sprint }
+  | { type: "sprint_completed"; data: Sprint }
+  | { type: "activity_created"; data: ActivityEvent };
+
+type ActivityEvent = {
+  id: string;
+  project_id: string;
+  task_id: string | null;
+  actor_id: string;
+  actor_name: string;
+  type: string;
+  payload: Record<string, string>;
+  created_at: string;
+};
+
+type ProjectStats = {
+  total: number;
+  overdue: number;
+  by_status: { todo: number; in_progress: number; done: number };
+  by_assignee: { assignee_id: string; name: string; count: number }[];
+  by_type: { type: string; count: number }[];
+  by_sprint: { sprint: string; count: number }[];
+  daily_done: { date: string; count: number }[];
+};
 
 type AuthContextValue = {
   token: string | null;
@@ -615,13 +888,15 @@ type AuthContextValue = {
 
 Routes are defined in `src/App.tsx` using React Router v6.
 
-| URL             | Component                    | Auth      |
-| --------------- | ---------------------------- | --------- |
-| `/`             | Redirect to `/projects`      | —         |
-| `/login`        | `AuthPage` (mode="login")    | Public    |
-| `/register`     | `AuthPage` (mode="register") | Public    |
-| `/projects`     | `ProjectsPage`               | Protected |
-| `/projects/:id` | `ProjectDetailPage`          | Protected |
+| URL                       | Component                    | Auth      |
+| ------------------------- | ---------------------------- | --------- |
+| `/`                       | Redirect to `/projects`      | —         |
+| `/login`                  | `AuthPage` (mode="login")    | Public    |
+| `/register`               | `AuthPage` (mode="register") | Public    |
+| `/projects`               | `ProjectsPage`               | Protected |
+| `/projects/:id`           | `ProjectDetailPage`          | Protected |
+| `/projects/:id/board`     | `BoardPage`                  | Protected |
+| `/projects/:id/dashboard` | `DashboardPage`              | Protected |
 
 ---
 
@@ -648,6 +923,7 @@ Both modes:
 - Display API error messages inline
 - Show loading state on submit button
 - Link to toggle between login and register
+- Pressing **Enter** in any field submits the form (submit button has `type="submit"`)
 
 ---
 
@@ -706,6 +982,7 @@ The main working view for a single project. Most complex page in the app.
 
 **Task Cards:**
 
+- Short task ID prefix (first 8 chars of UUID, e.g. `#8b01b617`) shown in monospace beside the title
 - Title (bold)
 - Description or "No description" in muted text
 - Priority pill (color-coded: red = high, yellow = medium, blue = low)
@@ -735,13 +1012,17 @@ The main working view for a single project. Most complex page in the app.
 
 #### `TaskModal` (`src/components/TaskModal.tsx`)
 
-- Modal dialog for creating or editing a task
-- **Create mode**: all fields empty (except defaults)
-- **Edit mode**: pre-filled with existing task data
-- **Fields**: title (required), description, status, priority, assignee (dropdown of all users), due date (date picker)
-- On save: calls `POST` (create) or `PATCH` (edit) and closes modal
+- Slide-in drawer panel for creating or editing a task
+- **Create mode**: all fields empty (except defaults); submit button labelled **"Create task"**
+- **Edit mode**: pre-filled with existing task data; submit button labelled **"Save task"**
+- Both modes show **"Saving..."** while the request is in flight
+- **Fields**: title (required), description, type (Task/Bug/Story/Epic), status, priority, assignee (dropdown of all users), sprint (dropdown — "Backlog (no sprint)" default, active sprints marked with `▶ Active`, completed with `✓`), due date (date picker — **required**; past dates blocked with `min` attribute and submit guard; labelled "Due date \*")
+- On save: calls `POST` (create) or `PATCH` (edit) and closes panel
 - Displays API errors inline
-- Closes on Cancel button or successful save
+- **Parent breadcrumb**: when editing a subtask, shows a clickable "Parent: [title]" link that navigates to the parent task
+- **Subtasks section** (only for non-subtask tasks): lists direct child tasks with type icon and status pill; inline "Add subtask" form
+- **Comments section**: loads comments on open, live-appends via SSE `comment_added`, supports edit/delete own comments
+- **Activity section**: loads task-scoped activity feed from `GET /projects/{id}/tasks/{taskId}/activity`; live-appends new events via SSE `activity_created`
 
 #### `Field` (`src/components/Field.tsx`)
 
@@ -776,6 +1057,136 @@ The main working view for a single project. Most complex page in the app.
 - Fields: email (validated), role selector (admin / member / viewer)
 - Calls `POST /projects/{id}/members` and notifies parent on success
 
+#### `ActivityFeed` (`src/components/ActivityFeed.tsx`)
+
+Timeline-style activity feed component used in both the **Activity tab** of `ProjectDetailPage` and the **Activity section** inside `TaskModal`.
+
+- Accepts `events: ActivityEvent[]` and `loading?: boolean` props
+- Renders each event as a row: coloured icon + human-readable sentence + relative timestamp
+- **Icon colours by event type:**
+  - ✚ green — `task_created`, `subtask_created`
+  - ✕ red — `task_deleted`
+  - ↔ blue — `status_changed`, `task_moved`
+  - ! amber — `priority_changed`
+  - ⬡ purple — `type_changed`
+  - 👤 green — `assignee_changed`, member events
+  - 📅 orange — `due_date_changed`
+  - ⚡ yellow — `sprint_changed`, sprint events
+  - ✏ blue — `title_changed`, `task_updated`
+  - 💬 purple — comment events
+- **Human-readable messages per event type:**
+  | Event | Message |
+  |---|---|
+  | `task_created` | `Alice created task "Foo"` |
+  | `subtask_created` | `Alice added subtask "Bar"` |
+  | `status_changed` | `Alice changed status of "Foo" from Todo to In Progress` |
+  | `priority_changed` | `Alice changed priority of "Foo" from MEDIUM to HIGH` |
+  | `type_changed` | `Alice changed type of "Foo" from task to bug` |
+  | `title_changed` | `Alice renamed task from "Old" to "New"` |
+  | `assignee_changed` | `Alice changed assignee of "Foo" from Unassigned to Bob` |
+  | `due_date_changed` | `Alice changed due date of "Foo" from none to 2026-05-10` |
+  | `sprint_changed` | `Alice moved "Foo" from Backlog to Sprint 1` |
+  | `comment_added` | `Alice commented on "Foo"` |
+  | `sprint_started` | `Alice started sprint "Sprint 1"` |
+  | `member_added` | `Alice added Bob as member` |
+- **Timestamp format:**
+  - < 1 minute → `just now`
+  - < 1 hour → `5m ago`
+  - < 24 hours → `3h ago`
+  - ≥ 24 hours → full date/time: `8 May 2026, 10:30` (en-GB locale)
+
+#### `TypeIcon` (`src/components/TypeIcon.tsx`)
+
+- Renders a small inline SVG icon for a task type
+- **Task** — blue rounded square with checkmark
+- **Bug** — red circle with antenna legs
+- **Story** — green bookmark
+- **Epic** — purple lightning bolt
+- Accepts `type`, `size` (default 14px), and optional `style` props
+- Shows an **instant CSS tooltip** (no browser delay) with the type name on hover via `data-tooltip` + `::after` pseudo-element
+- Used on task cards, inside `TaskModal` header, and in the subtask list
+
+#### `TaskCard` (`src/components/TaskCard.tsx`)
+
+- Reusable draggable task card used on the Kanban board (`BoardPage`)
+- Layout matches the Tasks tab design exactly:
+  - `TypeIcon` + short task ID (`#8b01b617` monospace) + task title (h3)
+  - Description or "No description." in muted text
+  - Priority pill (color-coded) + assignee name pill in a flex row
+  - Due date text (red if overdue)
+  - Optional inline status dropdown via `onStatusChange` prop — changes status directly without opening the modal
+- Accepts a `dragging` boolean prop — shows 0.4 opacity and `grabbing` cursor while being dragged
+- Accepts a `ref` for `@dnd-kit` sortable integration
+- `onClick` opens the full `TaskModal` for the task
+
+#### `DashboardPage` (`src/pages/DashboardPage.tsx`)
+
+Chart-based analytics page at `/projects/:id/dashboard`, accessible via the **"Dashboard 📊"** tab link in `ProjectDetailPage`.
+
+**Stat cards (top row):**
+
+- **Total tasks** — sum of all statuses
+- **To Do** — grey
+- **In Progress** — blue
+- **Done** — green
+- **Overdue** — red (tasks where `due_date < today` and not done)
+
+**Charts (all powered by `recharts` with `ResponsiveContainer`):**
+
+| Chart                | Type | Data source                                                |
+| -------------------- | ---- | ---------------------------------------------------------- |
+| Tasks by Status      | Pie  | `by_status` — grey/blue/green segments                     |
+| Tasks by Type        | Pie  | `by_type` — purple/red/green/amber for task/bug/story/epic |
+| Tasks by Assignee    | Bar  | `by_assignee` — brand-green bars                           |
+| Tasks by Sprint      | Bar  | `by_sprint` — purple bars; unassigned = "Backlog"          |
+| Tasks Closed Per Day | Line | `daily_done` — last 14 days, green line                    |
+
+- Pie charts use `outerRadius={70}`, `height={260}`, `margin` padding, and `labelLine` to prevent label clipping
+- Bar charts rotate X-axis labels 30° for long names
+- Line chart shows day labels in `"8 May"` format (en-GB locale)
+- Each chart card shows `"No data"` gracefully when the dataset is empty
+- Breadcrumb link `← ProjectName / Dashboard` at the top
+
+#### `BoardPage` (`src/pages/BoardPage.tsx`)
+
+Full Kanban board page at `/projects/:id/board`, built with `@dnd-kit/core` and `@dnd-kit/sortable`.
+
+**Sprint management panel (top bar):**
+
+- Sprint selector dropdown — shows all sprints for the project; highlights the active sprint
+- **Start** / **Complete** sprint buttons (visible based on current sprint status)
+- **+ Create Sprint** button — opens `CreateSprintModal`
+
+**`CreateSprintModal`:**
+
+- Fields: Sprint Name (required), Goal (optional), Start date (**required**, must be ≥ today, labelled "Start date _"), End date (**required**, must be ≥ start date, labelled "End date _")
+- Date inputs have `min` attributes and `onChange` guards; submit is blocked if either date is missing or invalid
+
+**Kanban columns (3 columns):**
+
+- **To Do** | **In Progress** | **Done**
+- Each column uses `SortableContext` (vertical list strategy)
+- Drag-over highlights column with a dashed brand-colour border
+- Empty columns show a "Drop tasks here" placeholder
+
+**Drag-and-drop:**
+
+- Powered by `@dnd-kit/core` — `DndContext` with `PointerSensor` (8px activation distance)
+- `onDragEnd` detects column change → calls `PATCH /tasks/{id}/position` with new `status`
+- Optimistic update applied immediately; reverts on API failure
+- `DragOverlay` renders a ghost copy of the dragged card at cursor position
+
+**Backlog section (below columns):**
+
+- Shows tasks not assigned to any sprint
+- Each row: TypeIcon + priority dot + #shortId + title + assignee avatar + due date chip + "+ Add to sprint" button
+- "+ Add to sprint" assigns the task to the currently selected sprint
+
+**SSE integration:**
+
+- Listens for `task_created`, `task_updated`, `task_deleted`, `task_moved`, `sprint_started`, `sprint_completed`
+- Board updates in real-time across all browser tabs
+
 ---
 
 ### 5.6 Custom Hooks
@@ -798,14 +1209,18 @@ const isConnected = useProjectEvents(
   projectId,
   token,
   (event: SSETaskEvent) => {
-    // Handle incoming real-time event
+    // Handle task/sprint/comment events
+  },
+  (activityEvent: ActivityEvent) => {
+    // Handle activity_created events
   },
 );
 ```
 
 - Creates a native `EventSource` to `GET /projects/{id}/events?token=JWT`
-- Listens for named events: `task_created`, `task_updated`, `task_deleted`
-- Parses JSON payloads and calls the provided callback
+- Listens for named events: `task_created`, `task_updated`, `task_deleted`, `task_moved`, `sprint_started`, `sprint_completed`, `comment_added`, `comment_deleted`, `activity_created`
+- The optional fourth parameter `onActivityEvent` is called for `activity_created` events; uses a ref internally to avoid stale closure issues
+- Parses JSON payloads and calls the appropriate callback
 - Returns a boolean indicating whether the SSE connection is active
 - Automatically closes the `EventSource` on component unmount or when `projectId`/`token` changes
 
@@ -851,68 +1266,85 @@ Used to convert raw status enum values to human-readable labels in the UI.
 
 **Notable CSS classes:**
 
-| Class                             | Purpose                                                  |
-| --------------------------------- | -------------------------------------------------------- |
-| `.button`                         | Primary CTA button (brand background)                    |
-| `.button.secondary`               | Outlined secondary button                                |
-| `.button.danger`                  | Red destructive button                                   |
-| `.card`                           | Bordered card container with shadow                      |
-| `.grid`                           | Auto-fit CSS Grid for project cards                      |
-| `.field`                          | Vertical label + input stack                             |
-| `.pill`                           | Small rounded badge                                      |
-| `.priority-high/medium/low`       | Priority-specific pill colors                            |
-| `.column`                         | Kanban column; highlights on drag-over                   |
-| `.task-card`                      | Draggable task card                                      |
-| `.error`                          | Red left-bordered error message                          |
-| `.modal-backdrop` / `.modal`      | Modal overlay and content box                            |
-| `.live-badge` / `.live-badge--on` | SSE connection status indicator                          |
-| `.pagination`                     | Prev/Next navigation controls                            |
-| `.auth` / `.auth-panel`           | Auth page two-panel layout                               |
-| `.toolbar`                        | Flex row with space-between for page headers             |
-| `.stack`                          | Vertical flex gap (14px)                                 |
-| `.tab-bar` / `.tab-btn`           | Horizontal tab strip; active tab has brand underline     |
-| `.tab-btn--active`                | Active state for tab button                              |
-| `.member-avatar`                  | Circular avatar showing name initials                    |
-| `.member-avatar--sm`              | Smaller avatar variant used in stacked project card list |
-| `.member-avatar--overflow`        | `+N` overflow count bubble                               |
-| `.avatar-stack`                   | Overlapping row of member avatars on project cards       |
-| `.member-list` / `.member-row`    | Member list container and individual row                 |
-| `.member-info`                    | Name + email column inside a member row                  |
+| Class                             | Purpose                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `.button`                         | Primary CTA button (brand background)                                    |
+| `.button.secondary`               | Outlined secondary button                                                |
+| `.button.danger`                  | Red destructive button                                                   |
+| `.card`                           | Bordered card container with shadow                                      |
+| `.grid`                           | Auto-fit CSS Grid for project cards                                      |
+| `.field`                          | Vertical label + input stack                                             |
+| `.pill`                           | Small rounded badge                                                      |
+| `.priority-high/medium/low`       | Priority-specific pill colors                                            |
+| `.column`                         | Kanban column; highlights on drag-over                                   |
+| `.task-card`                      | Draggable task card — `grab` cursor; buttons inside get `pointer`        |
+| `.type-icon`                      | Type icon wrapper — `pointer` cursor + instant CSS tooltip via `::after` |
+| `.error`                          | Red left-bordered error message                                          |
+| `.modal-backdrop` / `.modal`      | Modal overlay and content box                                            |
+| `.live-badge` / `.live-badge--on` | SSE connection status indicator                                          |
+| `.pagination`                     | Prev/Next navigation controls                                            |
+| `.auth` / `.auth-panel`           | Auth page two-panel layout                                               |
+| `.toolbar`                        | Flex row with space-between for page headers                             |
+| `.stack`                          | Vertical flex gap (14px)                                                 |
+| `.tab-bar` / `.tab-btn`           | Horizontal tab strip; active tab has brand underline                     |
+| `.tab-btn--active`                | Active state for tab button                                              |
+| `.member-avatar`                  | Circular avatar showing name initials                                    |
+| `.member-avatar--sm`              | Smaller avatar variant used in stacked project card list                 |
+| `.member-avatar--overflow`        | `+N` overflow count bubble                                               |
+| `.avatar-stack`                   | Overlapping row of member avatars on project cards                       |
+| `.member-list` / `.member-row`    | Member list container and individual row                                 |
+| `.member-info`                    | Name + email column inside a member row                                  |
 
 ---
 
 ## 6. Feature Map — Frontend ↔ Backend Coverage
 
-| Feature                     | Frontend                                | Backend                                      |
-| --------------------------- | --------------------------------------- | -------------------------------------------- |
-| User registration           | `AuthPage` (register mode)              | `POST /auth/register`                        |
-| User login                  | `AuthPage` (login mode)                 | `POST /auth/login`                           |
-| JWT storage & reuse         | `AuthContext`, `localStorage`           | `JwtUtil`, `JwtAuthFilter`                   |
-| Logout                      | `Layout` nav bar                        | (stateless, client-side only)                |
-| List projects               | `ProjectsPage`                          | `GET /projects`                              |
-| Create project              | `ProjectsPage` form                     | `POST /projects`                             |
-| View project detail         | `ProjectDetailPage`                     | `GET /projects/{id}`                         |
-| Edit project                | `ProjectDetailPage` edit form           | `PATCH /projects/{id}`                       |
-| Delete project              | `ProjectDetailPage` delete button       | `DELETE /projects/{id}`                      |
-| Project stats               | — (endpoint exists, not used in UI yet) | `GET /projects/{id}/stats`                   |
-| List tasks (with filters)   | `ProjectDetailPage` filter toolbar      | `GET /projects/{id}/tasks?status=&assignee=` |
-| Create task                 | `TaskModal` (create)                    | `POST /projects/{id}/tasks`                  |
-| Edit task                   | `TaskModal` (edit)                      | `PATCH /projects/{id}/tasks/{taskId}`        |
-| Delete task                 | Task card delete button                 | `DELETE /projects/{id}/tasks/{taskId}`       |
-| Change task status inline   | Task card status dropdown               | `PATCH /projects/{id}/tasks/{taskId}`        |
-| Drag-and-drop status change | Kanban column DnD                       | `PATCH /projects/{id}/tasks/{taskId}`        |
-| Real-time task updates      | `useProjectEvents` + SSE hook           | `SseController` + `EventBroker`              |
-| List all users (assignee)   | `TaskModal` assignee dropdown           | `GET /users`                                 |
-| Pagination                  | `ProjectsPage`, `ProjectDetailPage`     | `?page=&limit=` on all list endpoints        |
-| Dark mode                   | `useDarkMode` hook + `Layout` toggle    | — (client-side only)                         |
-| Health check                | —                                       | `GET /healthz`                               |
-| List project members        | `MemberList` in Members tab             | `GET /projects/{id}/members`                 |
-| Invite project member       | `InviteMemberModal`                     | `POST /projects/{id}/members`                |
-| Change member role          | Inline role dropdown in `MemberList`    | `PATCH /projects/{id}/members/{userId}`      |
-| Remove member               | Remove button in `MemberList`           | `DELETE /projects/{id}/members/{userId}`     |
-| Member avatars on cards     | `MemberAvatars` in `ProjectsPage`       | Members included in `GET /projects` response |
+| Feature                          | Frontend                                                                | Backend                                                        |
+| -------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------- |
+| User registration                | `AuthPage` (register mode)                                              | `POST /auth/register`                                          |
+| User login                       | `AuthPage` (login mode)                                                 | `POST /auth/login`                                             |
+| JWT storage & reuse              | `AuthContext`, `localStorage`                                           | `JwtUtil`, `JwtAuthFilter`                                     |
+| Logout                           | `Layout` nav bar                                                        | (stateless, client-side only)                                  |
+| List projects                    | `ProjectsPage`                                                          | `GET /projects`                                                |
+| Create project                   | `ProjectsPage` form                                                     | `POST /projects`                                               |
+| View project detail              | `ProjectDetailPage`                                                     | `GET /projects/{id}`                                           |
+| Edit project                     | `ProjectDetailPage` edit form                                           | `PATCH /projects/{id}`                                         |
+| Delete project                   | `ProjectDetailPage` delete button                                       | `DELETE /projects/{id}`                                        |
+| Project stats / Dashboard        | `DashboardPage` at `/projects/:id/dashboard` — stat cards + 5 recharts  | `GET /projects/{id}/stats`                                     |
+| List tasks (with filters)        | `ProjectDetailPage` filter toolbar                                      | `GET /projects/{id}/tasks?status=&assignee=`                   |
+| Create task                      | `TaskModal` (create) — due date **required**                            | `POST /projects/{id}/tasks`                                    |
+| Edit task                        | `TaskModal` (edit) — due date **required**                              | `PATCH /projects/{id}/tasks/{taskId}`                          |
+| Delete task                      | Task card delete button                                                 | `DELETE /projects/{id}/tasks/{taskId}`                         |
+| Change task status inline        | Task card status dropdown                                               | `PATCH /projects/{id}/tasks/{taskId}`                          |
+| Drag-and-drop status change      | Kanban column DnD (both `ProjectDetailPage` + `BoardPage`)              | `PATCH /projects/{id}/tasks/{taskId}/position`                 |
+| Real-time task updates           | `useProjectEvents` + SSE hook                                           | `SseController` + `EventBroker`                                |
+| List all users (assignee)        | `TaskModal` assignee dropdown                                           | `GET /users`                                                   |
+| Pagination                       | `ProjectsPage`, `ProjectDetailPage`                                     | `?page=&limit=` on all list endpoints                          |
+| Dark mode                        | `useDarkMode` hook + `Layout` toggle                                    | — (client-side only)                                           |
+| Health check                     | —                                                                       | `GET /healthz`                                                 |
+| List project members             | `MemberList` in Members tab                                             | `GET /projects/{id}/members`                                   |
+| Invite project member            | `InviteMemberModal`                                                     | `POST /projects/{id}/members`                                  |
+| Change member role               | Inline role dropdown in `MemberList`                                    | `PATCH /projects/{id}/members/{userId}`                        |
+| Remove member                    | Remove button in `MemberList`                                           | `DELETE /projects/{id}/members/{userId}`                       |
+| Member avatars on cards          | `MemberAvatars` in `ProjectsPage`                                       | Members included in `GET /projects` response                   |
+| Task types (Task/Bug/Story/Epic) | `TypeIcon` component + type selector in `TaskModal`                     | `type` field on `Task` entity/DTO                              |
+| Subtasks                         | Subtask list + add form in `TaskModal`; parent breadcrumb               | `GET /projects/{id}/tasks/{taskId}/subtasks`                   |
+| Task comments                    | Comments section in `TaskModal`, live via SSE                           | `GET/POST/PATCH/DELETE /projects/{id}/tasks/{taskId}/comments` |
+| Activity log (project feed)      | Activity tab in `ProjectDetailPage`, `ActivityFeed` component           | `GET /projects/{id}/activity`                                  |
+| Activity log (task feed)         | Activity section in `TaskModal`, live via SSE `activity_created`        | `GET /projects/{id}/tasks/{taskId}/activity`                   |
+| Specific activity per field      | `ActivityFeed` — field-specific messages with from/to values            | Per-field conditional logs in `TaskController.updateTask()`    |
+| Subtask creation → parent feed   | Parent task's Activity section shows `subtask_created` event            | `ActivityService.log()` called against parent task after save  |
+| Due date validation              | `min` attr + submit guard in `TaskModal` — **mandatory**                | Server-side date parse validation                              |
+| Click task card to open          | `onClick` on `<article>` in `ProjectDetailPage`                         | —                                                              |
+| Sprints (CRUD)                   | `BoardPage` sprint panel + `CreateSprintModal`                          | `GET/POST/PATCH/DELETE /projects/{id}/sprints`                 |
+| Sprint date validation           | `min` attr + submit guard — start **≥ today**, end **≥ start**          | — (frontend only)                                              |
+| Sprint task assignment           | Backlog "+ Add to sprint" button in `BoardPage`                         | `POST/DELETE /projects/{id}/sprints/{sprintId}/tasks/{taskId}` |
+| Sprint start / complete          | Start / Complete buttons in `BoardPage`                                 | `PATCH /projects/{id}/sprints/{sprintId}` with `status`        |
+| Kanban board (full)              | `BoardPage` at `/projects/:id/board`                                    | `PATCH /projects/{id}/tasks/{taskId}/position`                 |
+| Drag-and-drop between columns    | `@dnd-kit` in `BoardPage`                                               | `PATCH /projects/{id}/tasks/{taskId}/position`                 |
+| Real-time sprint/board events    | `useProjectEvents` — `task_moved`, `sprint_started`, `sprint_completed` | `EventBroker`                                                  |
 
-> **Note:** The `GET /projects/{id}/stats` endpoint is implemented in the backend but not yet wired to any frontend UI component. It returns task counts grouped by status and by assignee — suitable for a future dashboard or chart view.
+> **Note:** The Kanban board and Dashboard are separate pages reachable via tab links from `ProjectDetailPage`. Both share the same project SSE connection for live updates.
 
 ---
 

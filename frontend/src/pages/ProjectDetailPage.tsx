@@ -13,17 +13,21 @@ import { Field } from "../components/Field";
 import { TaskModal } from "../components/TaskModal";
 import { MemberList } from "../components/MemberList";
 import { InviteMemberModal } from "../components/InviteMemberModal";
+import { TypeIcon } from "../components/TypeIcon";
+import { ActivityFeed } from "../components/ActivityFeed";
 import { labelStatus } from "../utils/labelStatus";
 import { ArrowLeftIcon } from "../components/icons";
 import type {
+  ActivityEvent,
   Project,
   ProjectMember,
+  Sprint,
   SSETaskEvent,
   Task,
   User,
 } from "../types";
 
-type ActiveTab = "tasks" | "members";
+type ActiveTab = "tasks" | "members" | "activity";
 
 export function ProjectDetailPage() {
   const { id } = useParams();
@@ -75,20 +79,42 @@ export function ProjectDetailPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("tasks");
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [showInvite, setShowInvite] = useState(false);
+  const [latestCommentEvent, setLatestCommentEvent] =
+    useState<SSETaskEvent | null>(null);
+  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [sprints, setSprints] = useState<Sprint[]>([]);
 
-  const sseConnected = useProjectEvents(id, token, (event: SSETaskEvent) => {
-    if (event.type === "task_created") {
-      setTasks((prev) =>
-        prev.some((t) => t.id === event.data.id) ? prev : [event.data, ...prev],
-      );
-    } else if (event.type === "task_updated") {
-      setTasks((prev) =>
-        prev.map((t) => (t.id === event.data.id ? event.data : t)),
-      );
-    } else if (event.type === "task_deleted") {
-      setTasks((prev) => prev.filter((t) => t.id !== event.data.id));
-    }
-  });
+  const sseConnected = useProjectEvents(
+    id,
+    token,
+    (event: SSETaskEvent) => {
+      if (event.type === "task_created") {
+        setTasks((prev) =>
+          prev.some((t) => t.id === event.data.id)
+            ? prev
+            : [event.data, ...prev],
+        );
+      } else if (event.type === "task_updated") {
+        setTasks((prev) =>
+          prev.map((t) => (t.id === event.data.id ? event.data : t)),
+        );
+      } else if (event.type === "task_deleted") {
+        setTasks((prev) => prev.filter((t) => t.id !== event.data.id));
+      } else if (
+        event.type === "comment_added" ||
+        event.type === "comment_updated" ||
+        event.type === "comment_deleted"
+      ) {
+        setLatestCommentEvent(event);
+      }
+    },
+    (activityEvent: ActivityEvent) => {
+      setActivityEvents((prev) => [activityEvent, ...prev]);
+      // Also forward as commentEvent so TaskModal can live-update its activity list
+      setLatestCommentEvent({ type: "activity_created", data: activityEvent });
+    },
+  );
 
   async function load() {
     setLoading(true);
@@ -111,6 +137,23 @@ export function ProjectDetailPage() {
     } finally {
       setLoading(false);
     }
+    // Load activity separately (non-blocking)
+    setActivityLoading(true);
+    request<{ activity: ActivityEvent[] }>(
+      `/projects/${id}/activity?limit=50`,
+      { token },
+    )
+      .then((data) => setActivityEvents(data.activity))
+      .catch(() => {
+        /* activity is non-critical */
+      })
+      .finally(() => setActivityLoading(false));
+    // Load sprints (non-blocking)
+    request<{ sprints: Sprint[] }>(`/projects/${id}/sprints`, { token })
+      .then((data) => setSprints(data.sprints))
+      .catch(() => {
+        /* sprints non-critical */
+      });
   }
 
   useEffect(() => {
@@ -257,6 +300,9 @@ export function ProjectDetailPage() {
     }
   }
 
+  const myRole = members.find((m) => m.user_id === user?.id)?.role ?? "viewer";
+  const canEdit = myRole !== "viewer";
+
   const grouped = {
     todo: tasks.filter((t) => t.status === "todo"),
     in_progress: tasks.filter((t) => t.status === "in_progress"),
@@ -380,9 +426,11 @@ export function ProjectDetailPage() {
                     </button>
                   </>
                 )}
-                <button className="button" onClick={() => setShowCreate(true)}>
-                  New task
-                </button>
+                {canEdit && (
+                  <button className="button" onClick={() => setShowCreate(true)}>
+                    New task
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -407,6 +455,26 @@ export function ProjectDetailPage() {
                 {members.length}
               </span>
             </button>
+            <button
+              className={`tab-btn${activeTab === "activity" ? " tab-btn--active" : ""}`}
+              onClick={() => setActiveTab("activity")}
+            >
+              Activity
+            </button>
+            <Link
+              to={`/projects/${id}/board`}
+              className="tab-btn"
+              style={{ textDecoration: "none" }}
+            >
+              Board ⚡
+            </Link>
+            <Link
+              to={`/projects/${id}/dashboard`}
+              className="tab-btn"
+              style={{ textDecoration: "none" }}
+            >
+              Dashboard 📊
+            </Link>
           </div>
 
           {/* ─── Tasks tab ─── */}
@@ -461,9 +529,33 @@ export function ProjectDetailPage() {
                           key={task.id}
                           draggable
                           onDragStart={(e) => handleDragStart(e, task.id)}
+                          onClick={() => setEditing(task)}
                         >
                           <div>
-                            <h3>{task.title}</h3>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                              }}
+                            >
+                              <TypeIcon
+                                type={task.type ?? "task"}
+                                size={14}
+                                style={{ flexShrink: 0 }}
+                              />
+                              <span
+                                className="muted"
+                                style={{
+                                  fontSize: "0.75rem",
+                                  fontFamily: "monospace",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                #{task.id.slice(0, 8)}
+                              </span>
+                              <h3 style={{ margin: 0 }}>{task.title}</h3>
+                            </div>
                             <p className="muted">
                               {task.description || "No description."}
                             </p>
@@ -480,33 +572,42 @@ export function ProjectDetailPage() {
                           {task.due_date && (
                             <span className="muted">Due {task.due_date}</span>
                           )}
-                          <div className="row">
-                            <select
-                              value={task.status}
-                              onChange={(e) =>
-                                optimisticStatus(
-                                  task,
-                                  e.target.value as Task["status"],
-                                )
-                              }
-                            >
-                              <option value="todo">Todo</option>
-                              <option value="in_progress">In progress</option>
-                              <option value="done">Done</option>
-                            </select>
-                            <button
-                              className="button secondary"
-                              onClick={() => setEditing(task)}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="button danger"
-                              onClick={() => deleteTask(task.id)}
-                            >
-                              Delete
-                            </button>
-                          </div>
+                          {canEdit && (
+                            <div className="row">
+                              <select
+                                value={task.status}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) =>
+                                  optimisticStatus(
+                                    task,
+                                    e.target.value as Task["status"],
+                                  )
+                                }
+                              >
+                                <option value="todo">Todo</option>
+                                <option value="in_progress">In progress</option>
+                                <option value="done">Done</option>
+                              </select>
+                              <button
+                                className="button secondary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditing(task);
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="button danger"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void deleteTask(task.id);
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </article>
                       ))
                     )}
@@ -519,12 +620,16 @@ export function ProjectDetailPage() {
                   token={token}
                   task={editing}
                   users={users}
+                  sprints={sprints}
                   currentUser={user}
+                  commentEvent={latestCommentEvent}
+                  canEdit={canEdit}
                   onClose={() => {
                     setShowCreate(false);
                     setEditing(null);
                   }}
                   onSaved={upsertTask}
+                  onOpenTask={(t) => setEditing(t)}
                 />
               )}
               {Math.ceil(taskTotal / TASK_LIMIT) > 1 && (
@@ -576,6 +681,21 @@ export function ProjectDetailPage() {
                 onChangeRole={changeRole}
                 onRemove={removeMember}
               />
+            </div>
+          )}
+
+          {/* ─── Activity tab ─── */}
+          {activeTab === "activity" && (
+            <div style={{ marginTop: 20 }}>
+              <div className="card" style={{ padding: "16px 20px" }}>
+                <h3 style={{ margin: "0 0 14px 0", fontSize: "1rem" }}>
+                  Project Activity
+                </h3>
+                <ActivityFeed
+                  events={activityEvents}
+                  loading={activityLoading}
+                />
+              </div>
             </div>
           )}
 

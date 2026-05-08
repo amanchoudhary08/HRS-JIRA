@@ -10,6 +10,8 @@ import { Protected } from "./components/Protected";
 import { AuthPage } from "./pages/AuthPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage";
+import { BoardPage } from "./pages/BoardPage";
+import { DashboardPage } from "./pages/DashboardPage";
 import "./main.css";
 
 function App() {
@@ -33,6 +35,22 @@ function App() {
             element={
               <Protected>
                 <ProjectDetailPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/projects/:id/board"
+            element={
+              <Protected>
+                <BoardPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/projects/:id/dashboard"
+            element={
+              <Protected>
+                <DashboardPage />
               </Protected>
             }
           />

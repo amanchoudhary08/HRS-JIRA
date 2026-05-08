@@ -7,6 +7,7 @@ import com.taskflow.entity.User;
 import com.taskflow.repository.ProjectMemberRepository;
 import com.taskflow.repository.ProjectRepository;
 import com.taskflow.repository.UserRepository;
+import com.taskflow.service.ActivityService;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -29,13 +30,16 @@ public class ProjectMemberController {
     private final ProjectRepository projectRepo;
     private final ProjectMemberRepository memberRepo;
     private final UserRepository userRepo;
+    private final ActivityService activityService;
 
     public ProjectMemberController(ProjectRepository projectRepo,
                                    ProjectMemberRepository memberRepo,
-                                   UserRepository userRepo) {
+                                   UserRepository userRepo,
+                                   ActivityService activityService) {
         this.projectRepo = projectRepo;
         this.memberRepo = memberRepo;
         this.userRepo = userRepo;
+        this.activityService = activityService;
     }
 
     public record InviteRequest(
@@ -95,6 +99,8 @@ public class ProjectMemberController {
         pm.setUser(invitee);
         pm.setRole(role);
         pm = memberRepo.save(pm);
+        activityService.log(project.getId(), null, user.getId(), "member_added",
+                ActivityService.payload("userName", invitee.getName(), "role", pm.getRole()));
         return ResponseEntity.status(HttpStatus.CREATED).body(ProjectMemberDto.from(pm));
     }
 
@@ -131,6 +137,8 @@ public class ProjectMemberController {
 
         pm.setRole(req.role());
         pm = memberRepo.save(pm);
+        activityService.log(projectId, null, user.getId(), "role_changed",
+                ActivityService.payload("userName", pm.getUser().getName(), "role", pm.getRole()));
         return ResponseEntity.ok(ProjectMemberDto.from(pm));
     }
 
@@ -160,6 +168,8 @@ public class ProjectMemberController {
         }
 
         memberRepo.delete(pm);
+        activityService.log(projectId, null, user.getId(), "member_removed",
+                ActivityService.payload("userName", pm.getUser().getName()));
         return ResponseEntity.noContent().build();
     }
 

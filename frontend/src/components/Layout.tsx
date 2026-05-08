@@ -8,7 +8,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="shell">
       <nav className="nav">
         <Link className="brand" to="/projects">
-          TaskFlow
+          HRS TaskFlow
         </Link>
         <div className="nav-actions">
           <span className="underline">{user?.name}</span>

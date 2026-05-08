@@ -1,11 +1,14 @@
 package com.taskflow.controller;
 
 import com.taskflow.dto.TaskDto;
+import com.taskflow.entity.Sprint;
 import com.taskflow.entity.Task;
 import com.taskflow.entity.User;
 import com.taskflow.repository.ProjectRepository;
+import com.taskflow.repository.SprintRepository;
 import com.taskflow.repository.TaskRepository;
 import com.taskflow.repository.UserRepository;
+import com.taskflow.service.ActivityService;
 import com.taskflow.sse.EventBroker;
 import com.taskflow.sse.SseEvent;
 import org.springframework.data.domain.Page;
@@ -26,14 +29,19 @@ public class TaskController {
     private final ProjectRepository projectRepo;
     private final TaskRepository taskRepo;
     private final UserRepository userRepo;
+    private final SprintRepository sprintRepo;
     private final EventBroker broker;
+    private final ActivityService activityService;
 
     public TaskController(ProjectRepository projectRepo, TaskRepository taskRepo,
-                          UserRepository userRepo, EventBroker broker) {
+                          UserRepository userRepo, SprintRepository sprintRepo,
+                          EventBroker broker, ActivityService activityService) {
         this.projectRepo = projectRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
+        this.sprintRepo = sprintRepo;
         this.broker = broker;
+        this.activityService = activityService;
     }
 
     public record CreateTaskRequest(
@@ -42,7 +50,10 @@ public class TaskController {
             String status,
             String priority,
             String assigneeId,
-            String dueDate
+            String dueDate,
+            String type,
+            String parentId,
+            String sprintId
     ) {}
 
     public record UpdateTaskRequest(
@@ -51,8 +62,13 @@ public class TaskController {
             String status,
             String priority,
             String assigneeId,
-            String dueDate
+            String dueDate,
+            String type,
+            String parentId,
+            String sprintId
     ) {}
+
+    public record MoveTaskRequest(String status, Integer position, String sprintId) {}
 
     @GetMapping
     public ResponseEntity<?> listTasks(
@@ -90,6 +106,22 @@ public class TaskController {
         return ResponseEntity.ok(Map.of("tasks", dtos, "page", page, "limit", limit, "total", result.getTotalElements()));
     }
 
+    @GetMapping("/{taskId}")
+    public ResponseEntity<?> getTask(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID projectId,
+            @PathVariable UUID taskId) {
+
+        if (!projectRepo.existsAccessibleByUserAndId(projectId, user.getId())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "not found"));
+        }
+        Task task = taskRepo.findByIdAndProjectId(taskId, projectId).orElse(null);
+        if (task == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "task not found"));
+        }
+        return ResponseEntity.ok(TaskDto.from(task));
+    }
+
     @PostMapping
     public ResponseEntity<?> createTask(
             @AuthenticationPrincipal User user,
@@ -117,9 +149,29 @@ public class TaskController {
         if (req.dueDate() != null && !req.dueDate().isEmpty()) {
             task.setDueDate(LocalDate.parse(req.dueDate()));
         }
+        if (req.type() != null && !req.type().isEmpty()) {
+            task.setType(req.type());
+        }
+        if (req.parentId() != null && !req.parentId().isEmpty()) {
+            Task parent = taskRepo.findByIdAndProjectId(UUID.fromString(req.parentId()), projectId).orElse(null);
+            if (parent != null && parent.getParent() == null) {
+                task.setParent(parent);
+            }
+        }
+        if (req.sprintId() != null && !req.sprintId().isEmpty()) {
+            sprintRepo.findByIdAndProjectId(UUID.fromString(req.sprintId()), projectId)
+                    .ifPresent(task::setSprint);
+        }
         task = taskRepo.save(task);
         TaskDto dto = TaskDto.from(task);
         broker.publish(projectId, new SseEvent("task_created", dto));
+        activityService.log(projectId, task.getId(), user.getId(), "task_created",
+                ActivityService.payload("title", task.getTitle(), "type", task.getType()));
+        // Also log on the parent task so the parent's activity feed shows the subtask creation
+        if (task.getParent() != null) {
+            activityService.log(projectId, task.getParent().getId(), user.getId(), "subtask_created",
+                    ActivityService.payload("title", task.getTitle(), "type", task.getType()));
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
@@ -148,6 +200,20 @@ public class TaskController {
         String assigneeId = req.assigneeId();
         String dueDate = req.dueDate();
 
+        // Capture old values for specific activity log
+        // Use IDs first (safe on lazy proxies) then load names — avoids LazyInitializationException (open-in-view=false)
+        String oldTitle = task.getTitle();
+        String oldStatus = task.getStatus().name();
+        String oldPriority = task.getPriority().name();
+        String oldType = task.getType() != null ? task.getType() : "task";
+        String oldDueDate = task.getDueDate() != null ? task.getDueDate().toString() : null;
+        UUID oldAssigneeId = task.getAssignee() != null ? task.getAssignee().getId() : null;
+        String oldAssigneeName = oldAssigneeId != null
+                ? userRepo.findById(oldAssigneeId).map(User::getName).orElse(null) : null;
+        UUID oldSprintId = task.getSprint() != null ? task.getSprint().getId() : null;
+        String oldSprintName = oldSprintId != null
+                ? sprintRepo.findById(oldSprintId).map(Sprint::getName).orElse(null) : null;
+
         Map<String, String> errors = validateTaskInput(title, status, priority, assigneeId, dueDate, true);
         if (!errors.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "validation failed", "fields", errors));
@@ -168,10 +234,116 @@ public class TaskController {
         if (dueDate != null) {
             task.setDueDate(dueDate.isEmpty() ? null : LocalDate.parse(dueDate));
         }
+        if (req.type() != null && !req.type().isEmpty()) {
+            task.setType(req.type());
+        }
+        if (req.parentId() != null) {
+            if (req.parentId().isEmpty()) {
+                task.setParent(null);
+            } else {
+                Task parent = taskRepo.findByIdAndProjectId(UUID.fromString(req.parentId()), projectId).orElse(null);
+                if (parent != null && parent.getParent() == null && !parent.getId().equals(task.getId())) {
+                    task.setParent(parent);
+                }
+            }
+        }
+        if (req.sprintId() != null) {
+            if (req.sprintId().isEmpty()) {
+                task.setSprint(null);
+            } else {
+                sprintRepo.findByIdAndProjectId(UUID.fromString(req.sprintId()), projectId)
+                        .ifPresent(task::setSprint);
+            }
+        }
 
         task = taskRepo.save(task);
         TaskDto dto = TaskDto.from(task);
         broker.publish(projectId, new SseEvent("task_updated", dto));
+
+        // Build specific activity entries for each changed field
+        // Use IDs (safe on lazy proxies) then load names
+        UUID newAssigneeId = task.getAssignee() != null ? task.getAssignee().getId() : null;
+        String newAssigneeName = newAssigneeId != null
+                ? userRepo.findById(newAssigneeId).map(User::getName).orElse(null) : null;
+        UUID newSprintId = task.getSprint() != null ? task.getSprint().getId() : null;
+        String newSprintName = newSprintId != null
+                ? sprintRepo.findById(newSprintId).map(Sprint::getName).orElse(null) : null;
+        String newDueDate = task.getDueDate() != null ? task.getDueDate().toString() : null;
+        String newType = task.getType() != null ? task.getType() : "task";
+
+        if (!task.getTitle().equals(oldTitle)) {
+            activityService.log(projectId, task.getId(), user.getId(), "title_changed",
+                    ActivityService.payload("title", task.getTitle(), "from", oldTitle, "to", task.getTitle()));
+        }
+        if (!task.getStatus().name().equals(oldStatus)) {
+            activityService.log(projectId, task.getId(), user.getId(), "status_changed",
+                    ActivityService.payload("title", task.getTitle(), "from", oldStatus, "to", task.getStatus().name()));
+        }
+        if (!task.getPriority().name().equals(oldPriority)) {
+            activityService.log(projectId, task.getId(), user.getId(), "priority_changed",
+                    ActivityService.payload("title", task.getTitle(), "from", oldPriority, "to", task.getPriority().name()));
+        }
+        if (!newType.equals(oldType)) {
+            activityService.log(projectId, task.getId(), user.getId(), "type_changed",
+                    ActivityService.payload("title", task.getTitle(), "from", oldType, "to", newType));
+        }
+        if (!java.util.Objects.equals(newAssigneeName, oldAssigneeName)) {
+            activityService.log(projectId, task.getId(), user.getId(), "assignee_changed",
+                    ActivityService.payload("title", task.getTitle(),
+                            "from", oldAssigneeName != null ? oldAssigneeName : "Unassigned",
+                            "to", newAssigneeName != null ? newAssigneeName : "Unassigned"));
+        }
+        if (!java.util.Objects.equals(newDueDate, oldDueDate)) {
+            activityService.log(projectId, task.getId(), user.getId(), "due_date_changed",
+                    ActivityService.payload("title", task.getTitle(),
+                            "from", oldDueDate != null ? oldDueDate : "none",
+                            "to", newDueDate != null ? newDueDate : "none"));
+        }
+        if (!java.util.Objects.equals(newSprintName, oldSprintName)) {
+            activityService.log(projectId, task.getId(), user.getId(), "sprint_changed",
+                    ActivityService.payload("title", task.getTitle(),
+                            "from", oldSprintName != null ? oldSprintName : "Backlog",
+                            "to", newSprintName != null ? newSprintName : "Backlog"));
+        }
+        return ResponseEntity.ok(dto);
+    }
+
+    @PatchMapping("/{taskId}/position")
+    public ResponseEntity<?> moveTask(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID projectId,
+            @PathVariable UUID taskId,
+            @RequestBody MoveTaskRequest req) {
+
+        if (!projectRepo.existsAccessibleByUserAndId(projectId, user.getId())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "not found"));
+        }
+        Task task = taskRepo.findByIdAndProjectId(taskId, projectId).orElse(null);
+        if (task == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "task not found"));
+        }
+        if (req.status() != null && !req.status().isEmpty()) {
+            if (!isValidStatus(req.status())) {
+                return ResponseEntity.badRequest().body(Map.of("error", "invalid status"));
+            }
+            task.setStatus(Task.TaskStatus.valueOf(req.status()));
+        }
+        if (req.position() != null) {
+            task.setPosition(req.position());
+        }
+        if (req.sprintId() != null) {
+            if (req.sprintId().isEmpty()) {
+                task.setSprint(null);
+            } else {
+                sprintRepo.findByIdAndProjectId(UUID.fromString(req.sprintId()), projectId)
+                        .ifPresent(task::setSprint);
+            }
+        }
+        task = taskRepo.save(task);
+        TaskDto dto = TaskDto.from(task);
+        broker.publish(projectId, new SseEvent("task_moved", dto));
+        activityService.log(projectId, task.getId(), user.getId(), "task_moved",
+                ActivityService.payload("title", task.getTitle(), "status", task.getStatus().name()));
         return ResponseEntity.ok(dto);
     }
 
@@ -190,9 +362,29 @@ public class TaskController {
         if (!isOwner && !isCreator) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "forbidden"));
         }
+        String taskTitle = task.getTitle();
         taskRepo.delete(task);
         broker.publish(projectId, new SseEvent("task_deleted", Map.of("id", taskId.toString(), "project_id", projectId.toString())));
+        activityService.log(projectId, null, user.getId(), "task_deleted",
+                ActivityService.payload("title", taskTitle));
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{taskId}/subtasks")
+    public ResponseEntity<?> listSubtasks(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID projectId,
+            @PathVariable UUID taskId) {
+
+        if (!projectRepo.existsAccessibleByUserAndId(projectId, user.getId())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "not found"));
+        }
+        if (taskRepo.findByIdAndProjectId(taskId, projectId).isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "task not found"));
+        }
+        List<TaskDto> subtasks = taskRepo.findByProjectIdAndParentId(projectId, taskId)
+                .stream().map(TaskDto::from).toList();
+        return ResponseEntity.ok(Map.of("subtasks", subtasks));
     }
 
     private Map<String, String> validateTaskInput(String title, String status, String priority,
