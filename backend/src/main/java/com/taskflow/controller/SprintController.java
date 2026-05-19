@@ -15,6 +15,7 @@ import com.taskflow.sse.SseEvent;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -158,6 +159,7 @@ public class SprintController {
         return ResponseEntity.noContent().build();
     }
 
+    @Transactional
     @PostMapping("/{sprintId}/tasks/{taskId}")
     public ResponseEntity<?> addTaskToSprint(
             @AuthenticationPrincipal User user,
@@ -180,6 +182,7 @@ public class SprintController {
         return ResponseEntity.ok(dto);
     }
 
+    @Transactional
     @DeleteMapping("/{sprintId}/tasks/{taskId}")
     public ResponseEntity<?> removeTaskFromSprint(
             @AuthenticationPrincipal User user,

@@ -42,31 +42,35 @@
 - Register and log in with JWT-based authentication
 - Create and manage **projects**
 - Create, update, delete, and filter **tasks** within each project
-- View tasks in a **Kanban board** (Todo / In Progress / Done columns) with drag-and-drop
+- View tasks in a **Kanban board** (Todo / In Progress / Blocked / In Review / Done columns) with drag-and-drop
 - Receive **real-time task updates** via Server-Sent Events (SSE) — no manual refresh needed
 - Toggle **dark / light mode**
+- Create and manage **labels** per project and apply them to tasks for categorization
 - View **project statistics** (tasks by status, tasks by assignee)
+- **Full-text search** tasks by title or description across all accessible projects from the nav bar
+- Receive **in-app notifications** when a task is assigned to you or someone comments on your task — with a real-time bell icon, unread badge, dropdown panel, and optional hourly email digest
+- Upload and download **file attachments** on any task — drag-and-drop upload, progress bar, MIME-type validation, file streaming via the API (no direct browser-to-storage access)
 
 ---
 
 ## 2. Tech Stack
 
-| Layer              | Technology                                       |
-| ------------------ | ------------------------------------------------ |
-| Backend language   | Java 17                                          |
-| Backend framework  | Spring Boot 3.5.0                                |
-| ORM                | Spring Data JPA (Hibernate)                      |
-| Database           | PostgreSQL (via Docker)                          |
-| Migrations         | Flyway                                           |
-| Authentication     | JWT (JJWT 0.12.6, HMAC-SHA256)                   |
-| Real-time          | Server-Sent Events (SSE)                         |
-| Frontend language  | TypeScript                                       |
-| Frontend framework | React 18                                         |
-| Build tool         | Vite                                             |
-| Routing            | React Router v6                                  |
-| Drag-and-drop      | @dnd-kit/core + @dnd-kit/sortable                |
-| Styling            | Plain CSS with CSS custom properties (variables) |
-| Containerization   | Docker + Docker Compose                          |
+| Layer              | Technology                                              |
+| ------------------ | ------------------------------------------------------- |
+| Backend language   | Java 17                                                 |
+| Backend framework  | Spring Boot 3.5.0                                       |
+| ORM                | Spring Data JPA (Hibernate)                             |
+| Database           | PostgreSQL (via Docker)                                 |
+| Migrations         | Flyway                                                  |
+| Authentication     | JWT (JJWT 0.12.6, HMAC-SHA256)                          |
+| Real-time          | Server-Sent Events (SSE)                                |
+| Frontend language  | TypeScript                                              |
+| Frontend framework | React 18                                                |
+| Build tool         | Vite                                                    |
+| Routing            | React Router v6                                         |
+| Drag-and-drop      | @dnd-kit/core + @dnd-kit/sortable                       |
+| Styling            | Tailwind CSS v4 + CSS custom properties (design tokens) |
+| Containerization   | Docker + Docker Compose                                 |
 
 ---
 
@@ -104,8 +108,10 @@
 │  tables: users, projects,   │
 │          tasks, sprints,    │
 │          project_members,   │
-│          comments,          │
-│          activity_events    │
+│          comments, labels,  │
+│          task_labels,       │
+│          activity_events,   │
+│          notifications      │
 └─────────────────────────────┘
 ```
 
@@ -140,6 +146,8 @@ CREATE TABLE users (
 | `name` | `String` | Required |
 | `email` | `String` | Required, unique |
 | `password` | `String` | BCrypt hash |
+| `empId` | `String` | Employee ID, unique, nullable (added in V4) |
+| `googleId` | `String` | Google OAuth sub, unique, nullable (added in V11) |
 | `createdAt` | `OffsetDateTime` | Auto-set on insert |
 
 ---
@@ -170,7 +178,7 @@ CREATE TABLE projects (
 #### `tasks` table
 
 ```sql
--- Custom enum types
+-- Custom enum types (task_status extended by V12 to add blocked, in_review, closed)
 CREATE TYPE task_status   AS ENUM ('todo', 'in_progress', 'done');
 CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high');
 
@@ -199,7 +207,7 @@ CREATE TABLE tasks (
 | `id` | `UUID` | Auto-generated UUID |
 | `title` | `String` | Required |
 | `description` | `String` | Optional |
-| `status` | `TaskStatus` (enum) | todo / in_progress / done; default = todo |
+| `status` | `TaskStatus` (enum) | todo / in_progress / blocked / in_review / done; default = todo |
 | `priority` | `TaskPriority` (enum) | low / medium / high; default = medium |
 | `type` | `String` | task / bug / story / epic; default = task |
 | `project` | `Project` | ManyToOne, lazy |
@@ -209,6 +217,7 @@ CREATE TABLE tasks (
 | `sprint` | `Sprint` | ManyToOne, lazy, nullable — which sprint this task belongs to |
 | `position` | `int` | Display order within sprint/column; default = 0 |
 | `dueDate` | `LocalDate` | **Required**; must not be in the past |
+| `labels` | `Set<Label>` | ManyToMany via `task_labels` join table, lazy |
 | `createdAt` | `OffsetDateTime` | Auto on insert |
 | `updatedAt` | `OffsetDateTime` | Auto on update |
 
@@ -307,18 +316,139 @@ CREATE TABLE activity_events (
 
 ---
 
+#### `comments` table
+
+```sql
+CREATE TABLE comments (
+  id         uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  task_id    uuid        NOT NULL REFERENCES tasks(id)  ON DELETE CASCADE,
+  author_id  uuid        NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+  body       text        NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+**Java class:** `entity/Comment.java`
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `UUID` | Auto-generated UUID |
+| `task` | `Task` | ManyToOne, lazy |
+| `author` | `User` | ManyToOne, lazy |
+| `body` | `String` | Required |
+| `createdAt` | `OffsetDateTime` | Auto on insert |
+| `updatedAt` | `OffsetDateTime` | Auto on update |
+
+**Index:** `idx_comments_task_id`
+
+---
+
+#### `labels` and `task_labels` tables
+
+```sql
+CREATE TABLE labels (
+  id         uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name       text NOT NULL,
+  color      text NOT NULL DEFAULT '#6366f1'
+);
+
+CREATE TABLE task_labels (
+  task_id  uuid NOT NULL REFERENCES tasks(id)  ON DELETE CASCADE,
+  label_id uuid NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, label_id)
+);
+```
+
+**Java class:** `entity/Label.java`
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `UUID` | Auto-generated UUID |
+| `project` | `Project` | ManyToOne, lazy |
+| `name` | `String` | Required |
+| `color` | `String` | Hex color string; default `#6366f1` |
+
+**Indices:** `idx_labels_project_id`, `idx_task_labels_task_id`, `idx_task_labels_label_id`
+
+---
+
+#### `notifications` table
+
+```sql
+CREATE TABLE notifications (
+  id         uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type       text NOT NULL,
+  payload    jsonb NOT NULL DEFAULT '{}',
+  read       boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+```
+
+**Java class:** `entity/Notification.java`
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `UUID` | Auto-generated UUID |
+| `user` | `User` | ManyToOne, lazy — the recipient |
+| `type` | `String` | `task_assigned` or `comment_added` |
+| `payload` | `Map<String,Object>` | JSONB — e.g. `{ taskId, taskTitle, projectId, assignedBy }` |
+| `read` | `boolean` | Starts `false`; flipped to `true` when user reads it |
+| `createdAt` | `OffsetDateTime` | Auto-set on insert |
+
+**Index:** `idx_notifications_user_id`
+
+---
+
+#### `attachments` table
+
+```sql
+CREATE TABLE attachments (
+  id           uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  task_id      uuid        NOT NULL REFERENCES tasks(id)  ON DELETE CASCADE,
+  uploaded_by  uuid        NOT NULL REFERENCES users(id),
+  filename     text        NOT NULL,
+  mime_type    text        NOT NULL,
+  size_bytes   bigint      NOT NULL,
+  storage_key  text        NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_attachments_task_id ON attachments(task_id);
+```
+
+**Java class:** `entity/Attachment.java`
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `UUID` | Auto-generated UUID |
+| `task` | `Task` | ManyToOne, lazy — the task this attachment belongs to |
+| `uploadedBy` | `User` | ManyToOne, lazy — the user who uploaded the file |
+| `filename` | `String` | Original filename from the upload |
+| `mimeType` | `String` | MIME type (e.g. `image/png`, `application/pdf`) |
+| `sizeBytes` | `long` | File size in bytes |
+| `storageKey` | `String` | Internal object storage key — never exposed to clients |
+| `createdAt` | `OffsetDateTime` | Auto-set on insert |
+
+**Index:** `idx_attachments_task_id`
+
+---
+
 ### 4.2 DTOs
 
 Data Transfer Objects define what the API returns (never raw entities).
 
-| DTO                | Fields                                                                                                                                                                                             |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UserDto`          | `id`, `name`, `email`                                                                                                                                                                              |
-| `ProjectDto`       | `id`, `name`, `description`, `ownerId`, `createdAt`, `members` (optional — omitted when null)                                                                                                      |
-| `ProjectMemberDto` | `projectId`, `userId`, `userName`, `userEmail`, `role`, `joinedAt`                                                                                                                                 |
-| `TaskDto`          | `id`, `title`, `description`, `status`, `priority`, `type`, `projectId`, `assigneeId`, `createdBy`, `parentId`, `sprintId`, `position`, `dueDate`, `createdAt`, `updatedAt`                        |
-| `SprintDto`        | `id`, `projectId`, `name`, `goal`, `startDate`, `endDate`, `status`, `createdAt`                                                                                                                   |
-| `ActivityEventDto` | `id`, `projectId`, `taskId`, `actorId`, `actorName`, `type`, `payload` (`Map<String,Object>`), `createdAt` — built from in-memory values (no lazy re-fetch) to avoid `LazyInitializationException` |
+| DTO                | Fields                                                                                                                                                                                                                                  |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UserDto`          | `id`, `name`, `email`                                                                                                                                                                                                                   |
+| `ProjectDto`       | `id`, `name`, `description`, `ownerId`, `createdAt`, `members` (optional — omitted when null)                                                                                                                                           |
+| `ProjectMemberDto` | `projectId`, `userId`, `userName`, `userEmail`, `role`, `joinedAt`                                                                                                                                                                      |
+| `TaskDto`          | `id`, `title`, `description`, `status`, `priority`, `type`, `projectId`, `assigneeId`, `createdBy`, `parentId`, `sprintId`, `position`, `dueDate`, `createdAt`, `updatedAt`, `labels` (`List<LabelDto>`, sorted alphabetically by name) |
+| `LabelDto`         | `id`, `projectId`, `name`, `color`                                                                                                                                                                                                      |
+| `CommentDto`       | `id`, `taskId`, `projectId`, `authorId`, `authorName`, `body`, `createdAt`, `updatedAt`                                                                                                                                                 |
+| `SprintDto`        | `id`, `projectId`, `name`, `goal`, `startDate`, `endDate`, `status`, `createdAt`                                                                                                                                                        |
+| `ActivityEventDto` | `id`, `projectId`, `taskId`, `actorId`, `actorName`, `type`, `payload` (`Map<String,Object>`), `createdAt` — built from in-memory values (no lazy re-fetch) to avoid `LazyInitializationException`                                      |
+| `SearchResultDto`  | `projectId`, `projectName`, `tasks` (`List<TaskDto>`) — one entry per project in the global search response                                                                                                                             |
+| `NotificationDto`  | `id`, `userId`, `type`, `payload` (`Map<String,Object>`), `read`, `createdAt`                                                                                                                                                           |
+| `AttachmentDto`    | `id`, `taskId`, `uploadedById`, `uploadedByName`, `filename`, `mimeType`, `sizeBytes`, `createdAt` — `url` field is omitted (downloads proxied through the API, not presigned URLs)                                                     |
 
 All are Java `record` types (immutable). `ProjectDto` exposes two factories: `from(Project)` (no members) and `withMembers(Project, List<ProjectMemberDto>)` (includes members).
 
@@ -360,11 +490,42 @@ Spring Data JPA repositories with custom JPQL queries.
 - `countBySprintForProject(UUID)` — Stats: count per sprint name (null sprint → "Backlog"); top-level tasks only
 - `countDonePerDaySince(UUID projectId, LocalDate since)` — Native query: count tasks closed (status=done) per day since a given date; used for 14-day burndown
 - `countOverdueForProject(UUID projectId, LocalDate today)` — Count tasks where `due_date < today` and `status != done`
+- `searchInProject(UUID projectId, String q, Pageable)` — Case-insensitive LIKE search on `title` + `description` within one project; returns up to 20 results ordered by `updatedAt DESC`
+- `searchAcrossProjects(List<UUID> projectIds, String q, Pageable)` — Same LIKE search across multiple project IDs; returns up to 50 results ordered by `updatedAt DESC`
+- `findWithLabelsByIdIn(List<UUID> ids)` — JOIN FETCH `labels` for a batch of task IDs; used by `LabelController` before attach/detach to avoid `LazyInitializationException` on the `ManyToMany` collection
 
 #### `ActivityEventRepository`
 
 - `findByProjectIdOrderByCreatedAtDesc(UUID projectId, Pageable)` — Project-level activity feed, newest-first; JOIN FETCH actor
 - `findByTaskIdOrderByCreatedAtDesc(UUID taskId)` — Task-scoped activity feed; JOIN FETCH actor
+
+#### `CommentRepository`
+
+- `findByTaskIdOrderByCreatedAtAsc(UUID taskId)` — All comments for a task, oldest-first; JOIN FETCH `task → project` and `author`
+- `findByIdWithDetails(UUID id)` — Single comment with all associations eagerly loaded; used after `PATCH` to safely build `CommentDto`
+
+#### `SprintRepository`
+
+- `findByProjectIdOrderByCreatedAtAsc(UUID projectId)` — All sprints for a project in creation order
+- `findByIdAndProjectId(UUID id, UUID projectId)` — Safe sprint lookup scoped to a project
+
+#### `LabelRepository`
+
+- `findByProjectIdOrderByName(UUID projectId)` — All labels for a project, sorted alphabetically
+- `findByIdAndProjectId(UUID id, UUID projectId)` — Safe label lookup scoped to a project
+- `existsByProjectIdAndName(UUID projectId, String name)` — Duplicate-name guard before creating a label
+
+#### `NotificationRepository`
+
+- `findByUserIdOrderByReadAscCreatedAtDesc(UUID userId, Pageable)` — Paginated list for the current user; unread first
+- `countByUserIdAndReadFalse(UUID userId)` — Unread badge count
+- `markAllReadForUser(UUID userId)` — Bulk `UPDATE` via `@Modifying @Query`
+- `findUnreadByUserId(UUID userId)` — All unread rows; used by hourly email digest
+
+#### `AttachmentRepository`
+
+- `findByTaskIdOrderByCreatedAtAsc(UUID taskId)` — All attachments for a task, oldest-first; JOIN FETCH `uploadedBy`
+- `findByIdAndTaskId(UUID id, UUID taskId)` — Safe attachment lookup scoped to a task; JOIN FETCH `uploadedBy`
 
 ---
 
@@ -439,7 +600,7 @@ Base URL: `http://localhost:4000`
 **Validation:**
 
 - `title` — Required on creation
-- `status` — One of: `todo`, `in_progress`, `done`
+- `status` — One of: `todo`, `in_progress`, `blocked`, `in_review`, `done`
 - `priority` — One of: `low`, `medium`, `high`
 - `type` — One of: `task`, `bug`, `story`, `epic`; defaults to `task`
 - `parentId` — Must reference a task in the same project that is itself not a subtask (max 1 level of nesting)
@@ -465,6 +626,8 @@ Base URL: `http://localhost:4000`
 | `due_date_changed` | Due date added, changed, or removed | `title`, `from`, `to` |
 | `sprint_changed` | Sprint assignment added, changed, or removed | `title`, `from`, `to` |
 | `task_deleted` | Task deleted | `title` |
+| `label_added` | Label attached to task (via `LabelController`) | `title`, `label` |
+| `label_removed` | Label detached from task (via `LabelController`) | `title`, `label` |
 
 > **Lazy-loading fix:** Old `assignee`/`sprint` values are captured using proxy IDs (`task.getAssignee().getId()`) and then looked up via `userRepo`/`sprintRepo` **before** `taskRepo.save()` mutates the entity. New values are looked up the same way **after** `save()`. This avoids `LazyInitializationException` caused by `open-in-view: false` in `application.yml`.
 
@@ -539,6 +702,118 @@ Returns `200 { status: "ok" }` — used by Docker healthchecks.
 
 ---
 
+#### `SearchController`
+
+| Method | Path                             | Auth     | Params    | Response                             |
+| ------ | -------------------------------- | -------- | --------- | ------------------------------------ |
+| `GET`  | `/projects/{id}/tasks/search?q=` | Required | `q` (str) | `200 { tasks: TaskDto[] }`           |
+| `GET`  | `/search?q=`                     | Required | `q` (str) | `200 { results: SearchResultDto[] }` |
+
+**`GET /projects/{id}/tasks/search?q=`** — searches within a single project.
+
+- Returns up to 20 matching tasks.
+- Requires `q` of at least 2 characters; returns empty list otherwise.
+
+**`GET /search?q=`** — global search across all projects accessible to the current user.
+
+- Fetches all accessible projects (up to 100), then queries tasks via JPQL LIKE on `title` + `description`.
+- Returns results grouped by project (each group: `project_id`, `project_name`, `tasks[]`), sorted alphabetically by project name.
+- Returns up to 50 tasks total across all projects.
+- Requires `q` of at least 2 characters; returns empty list otherwise.
+
+---
+
+#### `LabelController` — `/projects/{projectId}/labels`
+
+| Method   | Path                                             | Auth     | Request Body        | Response                            |
+| -------- | ------------------------------------------------ | -------- | ------------------- | ----------------------------------- |
+| `GET`    | `/projects/{id}/labels`                          | Required | —                   | `200 { labels: LabelDto[] }`        |
+| `POST`   | `/projects/{id}/labels`                          | Required | `{ name, color? }`  | `201 LabelDto`                      |
+| `PATCH`  | `/projects/{id}/labels/{labelId}`                | Required | `{ name?, color? }` | `200 LabelDto`                      |
+| `DELETE` | `/projects/{id}/labels/{labelId}`                | Required | —                   | `204 No Content`                    |
+| `POST`   | `/projects/{id}/tasks/{taskId}/labels/{labelId}` | Required | —                   | `200 TaskDto` (with updated labels) |
+| `DELETE` | `/projects/{id}/tasks/{taskId}/labels/{labelId}` | Required | —                   | `200 TaskDto` (with updated labels) |
+
+**Validation:**
+
+- `name` — Required; must be unique per project (case-sensitive)
+- `color` — Optional; must match `#[0-9a-fA-F]{3,6}`; defaults to `#6366f1`
+
+**SSE side effects:** Label attach/detach broadcasts `task_updated` with the full updated `TaskDto` (including new label list). Also logs `label_added` / `label_removed` activity events.
+
+**Lazy-loading note:** Before modifying the `ManyToMany` labels collection, the task is re-fetched via `taskRepo.findWithLabelsByIdIn()` to eagerly load labels and avoid `LazyInitializationException`.
+
+---
+
+#### `NotificationController` — `/notifications`
+
+| Method  | Path                       | Auth     | Params             | Response                                      |
+| ------- | -------------------------- | -------- | ------------------ | --------------------------------------------- |
+| `GET`   | `/notifications`           | Required | `?page=1&limit=20` | `200 { notifications[], page, limit, total }` |
+| `GET`   | `/notifications/count`     | Required | —                  | `200 { unread: N }`                           |
+| `PATCH` | `/notifications/{id}/read` | Required | —                  | `200 NotificationDto`                         |
+| `PATCH` | `/notifications/read-all`  | Required | —                  | `200 { ok: true }`                            |
+
+All endpoints are scoped to the authenticated user — users can never read or modify another user's notifications.
+
+---
+
+#### `AttachmentController` — `/projects/{projectId}/tasks/{taskId}/attachments`
+
+| Method   | Path                                                                | Auth           | Request                            | Response                               |
+| -------- | ------------------------------------------------------------------- | -------------- | ---------------------------------- | -------------------------------------- |
+| `GET`    | `/projects/{id}/tasks/{taskId}/attachments`                         | Required       | —                                  | `200 { attachments: AttachmentDto[] }` |
+| `GET`    | `/projects/{id}/tasks/{taskId}/attachments/{attachmentId}/download` | Required       | —                                  | `200 (binary stream)`                  |
+| `POST`   | `/projects/{id}/tasks/{taskId}/attachments`                         | Required       | `multipart/form-data` field `file` | `201 AttachmentDto`                    |
+| `DELETE` | `/projects/{id}/tasks/{taskId}/attachments/{attachmentId}`          | Uploader/Owner | —                                  | `204 No Content`                       |
+
+**Upload validation:**
+
+- Max file size: **50 MB** (enforced by `AttachmentService` before storing, plus `spring.servlet.multipart.max-file-size`)
+- MIME type allowlist: `image/*`, `application/pdf`, `text/*`, `application/msword`, `application/vnd.openxmlformats-officedocument.*`, `application/vnd.ms-excel`, `application/vnd.ms-powerpoint`
+
+**Download strategy:**
+
+- The API streams the file from MinIO object storage internally using `StreamingResponseBody`
+- The browser never talks to MinIO directly — JWT authorization is enforced on every download
+- Responds with correct `Content-Type`, `Content-Disposition: inline; filename="…"`, and `Content-Length` headers
+
+**Authorization rules:**
+
+- `GET` (list + download) — Any project member
+- `DELETE` — Only the uploader or the project owner
+
+**Object storage:**
+
+- Files stored in MinIO under the bucket configured by `app.minio.bucket`
+- Storage key format: `{UUID}/{original-filename}` (UUID generated per upload)
+- `AttachmentService` wraps `MinioClient` — handles bucket creation on startup, upload (`putObject`), stream (`getObject`), delete (`removeObject`)
+
+---
+
+#### `NotificationSseController` — `/notifications/events`
+
+| Method | Path                    | Auth     | Notes                       |
+| ------ | ----------------------- | -------- | --------------------------- |
+| `GET`  | `/notifications/events` | Required | Returns `text/event-stream` |
+
+- Opens a **personal** SSE channel for the authenticated user (keyed by `userId`, not `projectId`)
+- Uses `broker.subscribeUser(user.getId())` from `EventBroker`
+- Sends an initial ping comment immediately
+- Emits `notification` events whenever `NotificationService.notify()` is called for that user
+
+---
+
+#### `GlobalExceptionHandler` — `@RestControllerAdvice`
+
+Applied globally across all controllers:
+
+- **`MethodArgumentNotValidException`** → `400 { error: "validation failed", fields: { fieldName: message } }` — fired when `@Valid` bean validation fails
+- **All other `Exception`** → `500 { error: "internal server error" }`
+- **SSE safety:** If the request `Accept` header contains `text/event-stream`, the handler returns `null` to avoid triggering a response-converter error on the long-lived SSE connection
+
+---
+
 ### 4.5 Security — JWT Auth
 
 **`JwtUtil`**
@@ -546,7 +821,7 @@ Returns `200 { status: "ok" }` — used by Docker healthchecks.
 - Algorithm: HMAC-SHA256
 - Secret: 32-byte key derived from `JWT_SECRET` environment variable
 - Expiry: 24 hours
-- Claims stored in token: `user_id`, `email`, `iat`, `exp`
+- Claims stored in token: `user_id`, `email`, `name`, `iat`, `exp`
 
 **`JwtAuthFilter`** (extends `OncePerRequestFilter`)
 
@@ -560,9 +835,85 @@ Returns `200 { status: "ok" }` — used by Docker healthchecks.
 
 - CSRF disabled (stateless REST API)
 - CORS: allows all origins, methods `GET/POST/PATCH/DELETE/OPTIONS`, headers `Authorization` and `Content-Type`
-- Session management: `STATELESS`
-- Public routes: `POST /auth/register`, `POST /auth/login`, `OPTIONS /**`, `GET /healthz`
+- Session management: `IF_REQUIRED` (required for OAuth2 state cookie handshake)
+- Public routes: `POST /auth/register`, `POST /auth/login`, `OPTIONS /**`, `GET /healthz`, `/oauth2/**`, `/login/oauth2/**`
 - All other routes require a valid JWT
+
+---
+
+### 4.5.1 Google OAuth2 — Sign in with Google
+
+Users can sign in using their Google account. The flow bridges Spring Security's OAuth2 client with the existing JWT system.
+
+**Backend components:**
+
+**`OAuth2SuccessHandler`** (`security/OAuth2SuccessHandler.java`) — `AuthenticationSuccessHandler`
+
+- Triggered after Google redirects back with a valid OAuth2 token
+- Reads `email`, `name`, `sub` (Google ID) from the `OAuth2User` principal
+- Upsert logic:
+  1. Find user by `google_id` → already linked, use directly
+  2. Find user by `email` → existing email/password account; links `google_id` and saves
+  3. Neither found → creates a new `User` with a random unusable password and the Google ID
+- Generates a standard JWT via `JwtUtil.generateToken(user)`
+- Redirects to `{FRONTEND_URL}/oauth2/callback?token=JWT`
+
+**`User` entity** — added `google_id text UNIQUE` column (migration `V11__google_oauth.sql`)
+
+**`UserRepository`** — added `findByGoogleId(String googleId)`
+
+**`application.yml`** additions:
+
+```yaml
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope: openid, email, profile
+        provider:
+          google:
+            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth?prompt=select_account
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+```
+
+**Frontend components:**
+
+**`OAuth2CallbackPage`** (`pages/OAuth2CallbackPage.tsx`)
+
+- Mounted at `/oauth2/callback`
+- Reads `?token=` from the URL
+- Decodes the JWT payload (base64) to extract `user_id`, `name`, `email`
+- Calls `loginWithToken(token, user)` from `AuthContext` → stores in `localStorage` + React state
+- Navigates to `/projects`
+
+**`AuthPage`** — "Continue with Google" button added below the regular login form
+
+- Renders an `<a>` tag pointing to `{VITE_API_URL}/oauth2/authorization/google`
+- Navigating to that URL starts the Spring Security OAuth2 flow
+- Google's logo SVG is inlined
+- A styled divider ("or") separates it from the email/password form
+
+**`AuthContext`** — added `loginWithToken(token, user)` method for the callback page to use
+
+**`AuthContextValue` type** — updated to include `loginWithToken`
+
+**Environment variables required:**
+
+| Variable               | Description                                                            |
+| ---------------------- | ---------------------------------------------------------------------- |
+| `GOOGLE_CLIENT_ID`     | From Google Cloud Console → OAuth 2.0 Credentials                      |
+| `GOOGLE_CLIENT_SECRET` | From Google Cloud Console → OAuth 2.0 Credentials                      |
+| `FRONTEND_URL`         | Where backend redirects after OAuth (default: `http://localhost:3000`) |
+
+**Google Cloud Console setup:**
+
+- Authorized redirect URI must be: `http://localhost:4000/login/oauth2/code/google`
+- OAuth consent screen must be configured (External audience for dev)
 
 ---
 
@@ -572,9 +923,13 @@ Returns `200 { status: "ok" }` — used by Docker healthchecks.
 
 **`EventBroker`** — Spring `@Component` singleton
 
-- Maintains a `ConcurrentHashMap<UUID, CopyOnWriteArrayList<SseEmitter>>` — maps project IDs to their list of active SSE clients
-- `subscribe(UUID projectId)` — Creates an `SseEmitter`, registers it, sets up cleanup callbacks (complete / timeout / error)
-- `publish(UUID projectId, SseEvent event)` — Iterates all emitters for the project and sends the event as JSON
+- Maintains two maps:
+  - `emitters: ConcurrentHashMap<UUID, CopyOnWriteArrayList<SseEmitter>>` — project-scoped (for task/sprint/comment events)
+  - `userEmitters: ConcurrentHashMap<UUID, CopyOnWriteArrayList<SseEmitter>>` — user-scoped (personal notification channel)
+- `subscribe(UUID projectId)` — Creates a project-scoped `SseEmitter`, registers it, sets up cleanup callbacks
+- `subscribeUser(UUID userId)` — Creates a user-scoped `SseEmitter` on the personal channel
+- `publish(UUID projectId, SseEvent event)` — Broadcasts to all emitters for the project
+- `publishToUser(UUID userId, SseEvent event)` — Pushes to a specific user's personal emitters only
 - Thread-safe; stale emitters are auto-removed on error
 
 **Event types and payloads:**
@@ -587,11 +942,41 @@ Returns `200 { status: "ok" }` — used by Docker healthchecks.
 | `sprint_started` | `PATCH /sprints/{id}` with `status: active` | Full `SprintDto` |
 | `sprint_completed` | `PATCH /sprints/{id}` with `status: completed` | Full `SprintDto` |
 | `comment_added` | `POST /comments` | Full `CommentDto` |
+| `comment_updated` | `PATCH /comments/{id}` | Full `CommentDto` |
 | `comment_deleted` | `DELETE /comments/{id}` | `{ id, task_id }` |
 | `activity_created` | Any mutating operation in any controller | Full `ActivityEventDto` |
 | `member_added` | `POST /members` | `{ userName, role }` |
 | `member_removed` | `DELETE /members/{userId}` | `{ userName }` |
 | `role_changed` | `PATCH /members/{userId}` | `{ userName, role }` |
+| `notification` | Task assigned or comment added (personal channel only) | Full `NotificationDto` |
+
+**`NotificationService`** (`service/NotificationService.java`)
+
+Centralised service injected into `TaskController` and `CommentController`:
+
+```java
+notificationService.notify(userId, type, payload);
+// payload builder helper:
+NotificationService.payload("taskId", id, "taskTitle", "Fix login bug", "assignedBy", "Alice");
+```
+
+- Saves a `Notification` row to the DB
+- Calls `broker.publishToUser(userId, SseEvent("notification", NotificationDto))` immediately
+
+**When notifications are triggered:**
+
+- `TaskController` — on task create/update: if a task is assigned to someone who is not the actor
+- `CommentController` — on comment create: if the task creator is not the commenter
+
+**`EmailService`** (`service/EmailService.java`)
+
+- `@Scheduled(fixedDelay = 3_600_000)` — runs every hour
+- Only active when `MAIL_ENABLED=true` in environment
+- For each user with unread notifications, sends a plain-text digest email via `JavaMailSender`
+- Mail failure is caught and logged — never breaks the HTTP response
+- Controlled via `app.mail.enabled` and `spring.mail.*` config in `application.yml`
+
+---
 
 **`ActivityService`** (`service/ActivityService.java`)
 
@@ -639,7 +1024,14 @@ Migrations live in `backend/src/main/resources/db/migration/`.
 - Adds indices `idx_project_members_project_id` and `idx_project_members_user_id`
 - Seeds all existing projects' owners into the table with role `owner`
 
-**V4\_\_emp_id.sql** — Employee ID column additions
+**V4\_\_emp_id.sql**
+
+- Adds `emp_id VARCHAR(20) UNIQUE` column to `users`
+- Sets `emp_id` for the two original seed users: `test@example.com` → `test`, `alex@example.com` → `are01`
+- Inserts 3 additional corporate users (all with password `password123`):
+  - Aman Choudhary (`ach51`) — `aman.choudhary@hrs.com`
+  - Gaganajeet Singh (`gsi50`) — `gaganajeet.singh@hrs.com`
+  - Umang Yadav (`uya01`) — `umang.yadav@hrs.com`
 
 **V5\_\_comments.sql**
 
@@ -687,6 +1079,58 @@ Migrations live in `backend/src/main/resources/db/migration/`.
   ```
 - Adds indices `idx_activity_project_id` and `idx_activity_task_id`
 
+**V9\_\_search_vector.sql**
+
+- Adds a generated, stored `tsvector` column to `tasks` for fast full-text search:
+  ```sql
+  ALTER TABLE tasks ADD COLUMN search_vector tsvector
+    GENERATED ALWAYS AS (
+      to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, ''))
+    ) STORED;
+  ```
+- Creates a `GIN` index `idx_tasks_search` on the column for high-performance text queries
+- The column is updated automatically by PostgreSQL whenever `title` or `description` changes — no application-side maintenance needed
+
+**V10\_\_labels.sql**
+
+- Creates the `labels` table: `id`, `project_id` (FK → `projects`), `name`, `color` (default `#6366f1`)
+- Creates the `task_labels` join table: composite PK `(task_id, label_id)`, both FKs with `ON DELETE CASCADE`
+- Adds indices `idx_labels_project_id`, `idx_task_labels_task_id`, `idx_task_labels_label_id`
+
+**V11\_\_google_oauth.sql**
+
+- Adds `google_id text UNIQUE` column to `users` — stores the Google OAuth `sub` claim for OAuth-authenticated accounts
+
+**V12\_\_add_task_statuses.sql**
+
+- Extends the `task_status` PostgreSQL enum with three new values:
+  - `blocked` — task is blocked by a dependency or issue
+  - `in_review` — task is under review / awaiting approval
+  - `closed` — task closed without completion (defined in DB; not currently exposed in the frontend UI)
+
+**V13\_\_notifications.sql**
+
+- Creates the `notifications` table: `id`, `user_id` (FK → `users`), `type`, `payload` (jsonb), `read` (boolean, default false), `created_at`
+- Adds index `idx_notifications_user_id`
+
+**V14\_\_attachments.sql**
+
+- Creates the `attachments` table:
+  ```sql
+  CREATE TABLE attachments (
+    id          uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    task_id     uuid        NOT NULL REFERENCES tasks(id)  ON DELETE CASCADE,
+    uploaded_by uuid        NOT NULL REFERENCES users(id),
+    filename    text        NOT NULL,
+    mime_type   text        NOT NULL,
+    size_bytes  bigint      NOT NULL,
+    storage_key text        NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now()
+  );
+  ```
+- Adds index `idx_attachments_task_id`
+- `storage_key` holds the internal MinIO object path and is never returned in API responses
+
 ---
 
 ### 4.8 Application Configuration
@@ -705,6 +1149,11 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
 
 server:
   port: 4000
@@ -713,6 +1162,15 @@ app:
   jwt:
     secret: ${JWT_SECRET} # Must be set via environment
     expiration-hours: 24
+  mail:
+    from: ${MAIL_FROM:noreply@taskflow.local}
+    enabled: ${MAIL_ENABLED:false} # set true to activate hourly digest
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${MINIO_PUBLIC_ENDPOINT:http://localhost:9002}
+    access-key: ${MINIO_USER:taskflow}
+    secret-key: ${MINIO_PASSWORD:taskflow123}
+    bucket: ${MINIO_BUCKET:taskflow}
 ```
 
 ---
@@ -731,6 +1189,8 @@ Key dependencies from `pom.xml`:
 | `flyway-core`                    | —       | Database migration         |
 | `jjwt-api/impl/jackson`          | 0.12.6  | JWT creation & parsing     |
 | `lombok`                         | 1.18.46 | Boilerplate reduction      |
+| `spring-boot-starter-mail`       | 3.5.0   | Email digest (optional)    |
+| `io.minio:minio`                 | 8.5.17  | MinIO object storage SDK   |
 
 **Frontend npm packages (key additions beyond React/Vite):**
 
@@ -754,6 +1214,13 @@ The frontend lives in `frontend/src/`.
 
 ```typescript
 type User = { id: string; name: string; email: string };
+
+type Label = {
+  id: string;
+  project_id: string;
+  name: string;
+  color: string;
+};
 
 type ProjectMember = {
   project_id: string;
@@ -788,7 +1255,7 @@ type Task = {
   id: string;
   title: string;
   description: string;
-  status: "todo" | "in_progress" | "done";
+  status: "todo" | "in_progress" | "blocked" | "in_review" | "done";
   priority: "low" | "medium" | "high";
   type: "task" | "bug" | "story" | "epic";
   project_id: string;
@@ -800,6 +1267,18 @@ type Task = {
   due_date: string | null;
   created_at: string;
   updated_at: string;
+  labels: Label[];
+};
+
+type Comment = {
+  id: string;
+  task_id: string;
+  project_id: string;
+  author_id: string;
+  author_name: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
 };
 
 type SSETaskEvent =
@@ -807,6 +1286,12 @@ type SSETaskEvent =
   | { type: "task_updated"; data: Task }
   | { type: "task_deleted"; data: { id: string; project_id: string } }
   | { type: "task_moved"; data: Task }
+  | { type: "comment_added"; data: Comment }
+  | { type: "comment_updated"; data: Comment }
+  | {
+      type: "comment_deleted";
+      data: { id: string; task_id: string; project_id: string };
+    }
   | { type: "sprint_started"; data: Sprint }
   | { type: "sprint_completed"; data: Sprint }
   | { type: "activity_created"; data: ActivityEvent };
@@ -825,11 +1310,43 @@ type ActivityEvent = {
 type ProjectStats = {
   total: number;
   overdue: number;
-  by_status: { todo: number; in_progress: number; done: number };
+  by_status: {
+    todo: number;
+    in_progress: number;
+    blocked: number;
+    in_review: number;
+    done: number;
+  };
   by_assignee: { assignee_id: string; name: string; count: number }[];
   by_type: { type: string; count: number }[];
   by_sprint: { sprint: string; count: number }[];
   daily_done: { date: string; count: number }[];
+};
+
+type SearchResult = {
+  project_id: string;
+  project_name: string;
+  tasks: Task[];
+};
+
+type Notification = {
+  id: string;
+  user_id: string;
+  type: "task_assigned" | "comment_added" | string;
+  payload: Record<string, string>;
+  read: boolean;
+  created_at: string;
+};
+
+type Attachment = {
+  id: string;
+  task_id: string;
+  uploaded_by_id: string;
+  uploaded_by_name: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
 };
 
 type AuthContextValue = {
@@ -837,6 +1354,7 @@ type AuthContextValue = {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
+  loginWithToken: (token: string, user: User) => void;
   logout: () => void;
 };
 ```
@@ -853,6 +1371,34 @@ type AuthContextValue = {
 - Returns `undefined` on `204 No Content` responses
 - On non-2xx: throws an error with the API's `field`/`error` message
 - Supports `GET`, `POST`, `PATCH`, `DELETE`
+
+**Search helpers exported from `client.ts`:**
+
+- `searchInProject(projectId, q, token)` → calls `GET /projects/{id}/tasks/search?q=` — returns `{ tasks: Task[] }`
+- `globalSearch(q, token)` → calls `GET /search?q=` — returns `{ results: SearchResult[] }`
+
+**Label helpers exported from `client.ts`:**
+
+- `fetchLabels(projectId, token)` → calls `GET /projects/{id}/labels` — returns `{ labels: Label[] }`
+- `createLabel(projectId, data, token)` → calls `POST /projects/{id}/labels`
+- `updateLabel(projectId, labelId, data, token)` → calls `PATCH /projects/{id}/labels/{labelId}`
+- `deleteLabel(projectId, labelId, token)` → calls `DELETE /projects/{id}/labels/{labelId}`
+- `attachLabel(projectId, taskId, labelId, token)` → calls `POST /projects/{id}/tasks/{taskId}/labels/{labelId}`
+- `detachLabel(projectId, taskId, labelId, token)` → calls `DELETE /projects/{id}/tasks/{taskId}/labels/{labelId}`
+
+**Notification helpers exported from `client.ts`:**
+
+- `fetchNotifications(token, page?, limit?)` → calls `GET /notifications` — returns `{ notifications: Notification[], total: number }`
+- `fetchNotificationCount(token)` → calls `GET /notifications/count` — returns `{ unread: number }`
+- `markNotificationRead(id, token)` → calls `PATCH /notifications/{id}/read`
+- `markAllNotificationsRead(token)` → calls `PATCH /notifications/read-all`
+
+**Attachment helpers exported from `client.ts`:**
+
+- `fetchAttachments(projectId, taskId, token)` → calls `GET /projects/{id}/tasks/{taskId}/attachments` — returns `{ attachments: Attachment[] }`
+- `uploadAttachment(projectId, taskId, file, token, onProgress?)` → `XMLHttpRequest` multipart POST to `POST /projects/{id}/tasks/{taskId}/attachments`; `onProgress` callback receives `0–100` percent for the progress bar
+- `deleteAttachment(projectId, taskId, attachmentId, token)` → calls `DELETE /projects/{id}/tasks/{taskId}/attachments/{attachmentId}`
+- Downloads are performed inline via `fetch` with an `Authorization` header, converted to a blob URL, and triggered via a temporary `<a download>` element — no separate helper function is needed
 
 ---
 
@@ -955,7 +1501,15 @@ The main working view for a single project. Most complex page in the app.
 - "New Task" button (opens `TaskModal`)
 - Live status badge (green pulsing dot when SSE is connected, grey when not)
 
-**Tab bar:** `Tasks | Members` — switches between the kanban view and the membership panel
+**Left sidebar navigation** (via `ProjectSidebar` component):
+
+- **Tasks** — main task list view (default)
+- **Members** — shows member count pill; membership management panel
+- **Activity** — project-level activity feed
+- **Labels** — label management panel; shows label count pill
+- **Board ⚡** — navigates to `/projects/:id/board`
+- **Dashboard 📊** — navigates to `/projects/:id/dashboard`
+- Active tab highlighted; board/dashboard active state detected via URL path
 
 **Members tab:**
 
@@ -965,14 +1519,14 @@ The main working view for a single project. Most complex page in the app.
 
 **Filter toolbar (Tasks tab):**
 
-- Status filter dropdown: All / Todo / In Progress / Done
+- Status filter dropdown: All / Todo / In Progress / Blocked / In Review / Done
 - Assignee filter dropdown: All + list of all users (fetched from `GET /users`)
 - Filters are applied together (both can be active simultaneously)
 - Changing filters resets to page 1
 
-**Kanban Board (3 columns):**
+**Kanban Board (5 columns):**
 
-- Columns: **Todo** | **In Progress** | **Done**
+- Columns: **Todo** | **In Progress** | **Blocked** | **In Review** | **Done**
 - HTML5 Drag-and-Drop: tasks can be dragged between columns
   - Drop on a column → optimistic status update in UI
   - `PATCH` request sent to backend
@@ -1006,9 +1560,20 @@ The main working view for a single project. Most complex page in the app.
 #### `Layout` (`src/components/Layout.tsx`)
 
 - Full-page shell rendered around every protected page
-- **Nav bar**: Brand logo (links to `/projects`), logged-in user's name, dark/light toggle button, Logout button
+- **Nav bar**: Brand logo (links to `/projects`), **global search bar** (centre), `NotificationBell` (when logged in), logged-in user's name, Logout button
 - Dark/light toggle uses `useDarkMode` hook
 - Logout calls `logout()` from auth context
+
+**Global search bar (in the nav):**
+
+- Centred `<input type="search">` with `max-width: 380px`
+- Debounces input by **300 ms** before calling `GET /search?q=`
+- Requires at least **2 characters** to trigger a search
+- Shows a dropdown panel below the input with results grouped by project
+- Each result row shows: `TypeIcon`, task title (with matched text **highlighted in yellow**), status pill
+- Clicking a result navigates to `/projects/:id` and clears the search
+- Dropdown closes when clicking anywhere outside the search wrapper
+- Keyboard / click events handled; `aria-label` and `role="listbox"` / `role="option"` for accessibility
 
 #### `TaskModal` (`src/components/TaskModal.tsx`)
 
@@ -1056,6 +1621,32 @@ The main working view for a single project. Most complex page in the app.
 - Modal dialog for inviting a user by email
 - Fields: email (validated), role selector (admin / member / viewer)
 - Calls `POST /projects/{id}/members` and notifies parent on success
+
+#### `LabelChip` (`src/components/LabelChip.tsx`)
+
+- Renders a small colored pill for a label
+- Background color set from `label.color`; text color (white or dark) computed via luminance check for readability
+- Optional `×` remove button via `onRemove` prop; `e.stopPropagation()` prevents card click-through
+- Used in `LabelPicker` (selected labels row) and on task cards
+
+#### `LabelPicker` (`src/components/LabelPicker.tsx`)
+
+- Multi-select dropdown for attaching/detaching labels on a task
+- Shows currently applied labels as `LabelChip` components with `×` to detach
+- **"＋ Labels"** toggle button opens a dropdown listing available (unselected) labels
+- Clicking an available label calls `onAttach`; clicking `×` on a chip calls `onDetach`
+- Closes on click outside via `mousedown` listener
+- Empty states: `"No labels yet — create some below"` (no labels exist) and `"All labels applied"` (all already attached)
+
+#### `ProjectSidebar` (`src/components/ProjectSidebar.tsx`)
+
+Vertical left-side navigation panel inside `ProjectDetailPage`.
+
+- **Tab buttons**: Tasks, Members (with `memberCount` pill), Activity, Labels (with `labelCount` pill)
+- **Navigation links**: Board ⚡ (`/projects/:id/board`), Dashboard 📊 (`/projects/:id/dashboard`)
+- A `sidebar-divider` visually separates tab buttons from page navigation links
+- Active state: tab buttons use `activeTab` prop; board/dashboard links detected via `useLocation` path match
+- Navigation: within `ProjectDetailPage`, tab buttons call `onTabChange` callback; otherwise navigates via `?tab=` query param
 
 #### `ActivityFeed` (`src/components/ActivityFeed.tsx`)
 
@@ -1106,6 +1697,35 @@ Timeline-style activity feed component used in both the **Activity tab** of `Pro
 - Shows an **instant CSS tooltip** (no browser delay) with the type name on hover via `data-tooltip` + `::after` pseudo-element
 - Used on task cards, inside `TaskModal` header, and in the subtask list
 
+#### `NotificationBell` (`src/components/NotificationBell.tsx`)
+
+Bell icon with real-time notification panel, mounted in the `Layout` nav bar.
+
+**On mount:**
+
+- Calls `GET /notifications/count` immediately and every **30 seconds** (polling fallback)
+- Opens a personal SSE connection to `GET /notifications/events` for live push
+
+**Unread badge:**
+
+- Red circle above the bell icon showing the unread count (capped at `99+`)
+
+**Dropdown panel (opens on click):**
+
+- Loads full notification list from `GET /notifications` on first open
+- Each row: emoji icon (📋 = task assigned, 💬 = comment), human-readable message, relative timestamp (`just now` / `5m ago` / `3h ago`), blue dot for unread items
+- Clicking a row calls `PATCH /notifications/{id}/read`, decrements the badge, and navigates to `/projects/{projectId}`
+- **"Mark all read"** button — calls `PATCH /notifications/read-all`, zeroes the badge
+- Dropdown closes when clicking outside
+
+**Toast notifications:**
+
+- When a `notification` SSE event arrives: unread count incremented, item prepended to panel list, and a **toast** pops up in the bottom-right corner
+- Toast auto-dismisses after **4 seconds**; has an `×` manual dismiss button
+- No external toast library — plain inline styles
+
+---
+
 #### `TaskCard` (`src/components/TaskCard.tsx`)
 
 - Reusable draggable task card used on the Kanban board (`BoardPage`)
@@ -1115,9 +1735,29 @@ Timeline-style activity feed component used in both the **Activity tab** of `Pro
   - Priority pill (color-coded) + assignee name pill in a flex row
   - Due date text (red if overdue)
   - Optional inline status dropdown via `onStatusChange` prop — changes status directly without opening the modal
+  - **📎N** paperclip badge shown when `attachmentCount > 0` (count passed as optional prop)
 - Accepts a `dragging` boolean prop — shows 0.4 opacity and `grabbing` cursor while being dragged
 - Accepts a `ref` for `@dnd-kit` sortable integration
 - `onClick` opens the full `TaskModal` for the task
+
+#### `AttachmentZone` / `AttachmentList` (`src/components/AttachmentZone.tsx`)
+
+Two co-located components rendered inside `TaskModal` between the Comments and Activity sections.
+
+**`AttachmentList`:**
+
+- Renders the list of existing attachments for a task (reloads whenever `taskId` changes)
+- Each row: file icon (by MIME type — image/PDF/doc/text/generic), filename, formatted size (KB/MB), uploader name, relative date, **Download** button, **Delete** button (visible if uploader or project owner)
+- **Download**: calls `GET /attachments/{id}/download` via `fetch` with JWT header → receives binary stream → creates a blob URL → triggers browser download via a temporary `<a download>` element
+- **Delete**: calls `deleteAttachment()` → removes row from list on success
+
+**`AttachmentZone`:**
+
+- Drag-and-drop file upload area inside the task detail panel
+- Accepts files via drag-and-drop or click-to-browse (`<input type="file" multiple>`)
+- Calls `uploadAttachment()` with `onProgress` callback — shows a **progress bar** (0–100 %)
+- On upload complete: refreshes the `AttachmentList`
+- Validates client-side that the file is not over 50 MB before uploading (shows inline error otherwise)
 
 #### `DashboardPage` (`src/pages/DashboardPage.tsx`)
 
@@ -1233,6 +1873,8 @@ const isConnected = useProjectEvents(
 ```typescript
 labelStatus("todo"); // → "Todo"
 labelStatus("in_progress"); // → "In progress"
+labelStatus("blocked"); // → "Blocked"
+labelStatus("in_review"); // → "In Review"
 labelStatus("done"); // → "Done"
 ```
 
@@ -1242,58 +1884,48 @@ Used to convert raw status enum values to human-readable labels in the UI.
 
 ### 5.8 Styling
 
-`src/main.css` — Single global stylesheet using CSS custom properties.
+The app uses **Tailwind CSS v4** (via `@import "tailwindcss"` in `main.css`) with design tokens defined as `@theme` CSS custom properties. All component class strings live in `src/styles/classes.ts` as exported string constants consumed via `import * as cx from "../styles/classes"`.
 
-**Color tokens (light mode defaults):**
+`src/main.css` — Global stylesheet (Tailwind import + design tokens + base resets only).
 
-| Variable         | Value                 | Usage                        |
-| ---------------- | --------------------- | ---------------------------- |
-| `--bg`           | `#f6f7f3`             | Page background              |
-| `--bg-card`      | `#ffffff`             | Card/modal background        |
-| `--text`         | `#1e2623`             | Primary text                 |
-| `--text-muted`   | `#65706b`             | Secondary / description text |
-| `--brand`        | `#1f5b45`             | Primary brand color (teal)   |
-| `--border`       | `#dfe4dc`             | Card borders                 |
-| `--border-input` | `#cdd5cf`             | Input field borders          |
-| `--pill-bg`      | `#e8efe7`             | Badge backgrounds            |
-| `--error-border` | `#b42318`             | Error state borders          |
-| `--shadow`       | `rgba(35,51,45,0.08)` | Card drop shadows            |
+**Color tokens (defined in `@theme`, light mode defaults):**
 
-**Dark mode** (activated by `.dark` class on `<html>`):\*\*
+| Variable               | Value                 | Usage                        |
+| ---------------------- | --------------------- | ---------------------------- |
+| `--color-bg`           | `#f6f7f3`             | Page background              |
+| `--color-bg-card`      | `#ffffff`             | Card/modal background        |
+| `--color-text`         | `#1e2623`             | Primary text                 |
+| `--color-text-muted`   | `#65706b`             | Secondary / description text |
+| `--color-brand`        | `#1f5b45`             | Primary brand color (teal)   |
+| `--color-border`       | `#dfe4dc`             | Card borders                 |
+| `--color-border-input` | `#cdd5cf`             | Input field borders          |
+| `--color-pill-bg`      | `#e8efe7`             | Badge backgrounds            |
+| `--color-error-border` | `#b42318`             | Error state borders          |
+| `--shadow-card`        | `rgba(35,51,45,0.08)` | Card drop shadows            |
 
-- All variables are overridden with higher-contrast dark equivalents
-- Brand color lightens to `#5bbf94` for visibility
+**`src/styles/classes.ts`** — Shared Tailwind class string constants:
 
-**Notable CSS classes:**
+| Export                                            | Purpose                                      |
+| ------------------------------------------------- | -------------------------------------------- |
+| `cx.fieldInput`                                   | `<input>` — full border, rounded, focus ring |
+| `cx.fieldSelect`                                  | `<select>` — same as fieldInput              |
+| `cx.fieldTextarea`                                | `<textarea>` — same + min-height + resize-y  |
+| `cx.commentFormTextarea`                          | Textarea inside comment forms                |
+| `cx.btn`                                          | Primary button (brand background)            |
+| `cx.btnSecondary`                                 | Outlined secondary button                    |
+| `cx.btnDanger`                                    | Red destructive button                       |
+| `cx.card`                                         | Bordered card with shadow                    |
+| `cx.modal` / `cx.modalBackdrop`                   | Modal overlay + content box                  |
+| `cx.drawer` / `cx.drawerHeader` / `cx.drawerBody` | Right slide-in task panel                    |
+| `cx.searchWrapper` / `cx.searchDropdown`          | Global search bar + dropdown                 |
+| `cx.labelChip` / `cx.labelPickerDropdown`         | Label pills + picker dropdown                |
 
-| Class                             | Purpose                                                                  |
-| --------------------------------- | ------------------------------------------------------------------------ |
-| `.button`                         | Primary CTA button (brand background)                                    |
-| `.button.secondary`               | Outlined secondary button                                                |
-| `.button.danger`                  | Red destructive button                                                   |
-| `.card`                           | Bordered card container with shadow                                      |
-| `.grid`                           | Auto-fit CSS Grid for project cards                                      |
-| `.field`                          | Vertical label + input stack                                             |
-| `.pill`                           | Small rounded badge                                                      |
-| `.priority-high/medium/low`       | Priority-specific pill colors                                            |
-| `.column`                         | Kanban column; highlights on drag-over                                   |
-| `.task-card`                      | Draggable task card — `grab` cursor; buttons inside get `pointer`        |
-| `.type-icon`                      | Type icon wrapper — `pointer` cursor + instant CSS tooltip via `::after` |
-| `.error`                          | Red left-bordered error message                                          |
-| `.modal-backdrop` / `.modal`      | Modal overlay and content box                                            |
-| `.live-badge` / `.live-badge--on` | SSE connection status indicator                                          |
-| `.pagination`                     | Prev/Next navigation controls                                            |
-| `.auth` / `.auth-panel`           | Auth page two-panel layout                                               |
-| `.toolbar`                        | Flex row with space-between for page headers                             |
-| `.stack`                          | Vertical flex gap (14px)                                                 |
-| `.tab-bar` / `.tab-btn`           | Horizontal tab strip; active tab has brand underline                     |
-| `.tab-btn--active`                | Active state for tab button                                              |
-| `.member-avatar`                  | Circular avatar showing name initials                                    |
-| `.member-avatar--sm`              | Smaller avatar variant used in stacked project card list                 |
-| `.member-avatar--overflow`        | `+N` overflow count bubble                                               |
-| `.avatar-stack`                   | Overlapping row of member avatars on project cards                       |
-| `.member-list` / `.member-row`    | Member list container and individual row                                 |
-| `.member-info`                    | Name + email column inside a member row                                  |
+**Form element border policy:** every `<input>`, `<select>`, and `<textarea>` across all pages and components uses one of `cx.fieldInput`, `cx.fieldSelect`, `cx.fieldTextarea`, or `cx.commentFormTextarea` to ensure consistent borders, focus states, and background colors.
+
+**Dark mode** (activated by `.dark` class on `<html>`):
+
+- All `@theme` color tokens are overridden with higher-contrast dark equivalents
+- Brand color lightens to `#5bbf94` for visibility on dark backgrounds
 
 ---
 
@@ -1343,6 +1975,21 @@ Used to convert raw status enum values to human-readable labels in the UI.
 | Kanban board (full)              | `BoardPage` at `/projects/:id/board`                                    | `PATCH /projects/{id}/tasks/{taskId}/position`                 |
 | Drag-and-drop between columns    | `@dnd-kit` in `BoardPage`                                               | `PATCH /projects/{id}/tasks/{taskId}/position`                 |
 | Real-time sprint/board events    | `useProjectEvents` — `task_moved`, `sprint_started`, `sprint_completed` | `EventBroker`                                                  |
+| List project labels              | Labels tab in `ProjectDetailPage`                                       | `GET /projects/{id}/labels`                                    |
+| Create / edit / delete label     | Labels tab inline form in `ProjectDetailPage`                           | `POST/PATCH/DELETE /projects/{id}/labels/{labelId?}`           |
+| Attach label to task             | `LabelPicker` in `TaskModal`                                            | `POST /projects/{id}/tasks/{taskId}/labels/{labelId}`          |
+| Detach label from task           | `LabelChip` × button in `LabelPicker`                                   | `DELETE /projects/{id}/tasks/{taskId}/labels/{labelId}`        |
+| Labels displayed on task cards   | `LabelChip` components on task cards and in `TaskModal`                 | `labels` field in `TaskDto`                                    |
+| In-app notifications             | `NotificationBell` in `Layout` nav — bell, badge, dropdown, toasts      | `GET/PATCH /notifications`, `GET /notifications/count`         |
+| Real-time notification push      | SSE `notification` event via personal channel in `NotificationBell`     | `NotificationSseController` + `EventBroker.publishToUser()`    |
+| Notify on task assignment        | Badge + toast when someone assigns a task to the current user           | `NotificationService.notify()` in `TaskController`             |
+| Notify on comment                | Badge + toast when someone comments on the current user's task          | `NotificationService.notify()` in `CommentController`          |
+| Email digest (optional)          | — (server-side only)                                                    | `EmailService` `@Scheduled` hourly; enabled via `MAIL_ENABLED` |
+| Upload file attachment           | `AttachmentZone` drag-and-drop + progress bar in `TaskModal`            | `POST /projects/{id}/tasks/{taskId}/attachments`               |
+| List file attachments            | `AttachmentList` inside `TaskModal`                                     | `GET /projects/{id}/tasks/{taskId}/attachments`                |
+| Download file attachment         | Blob URL download via `fetch` + JWT header                              | `GET /projects/{id}/tasks/{taskId}/attachments/{id}/download`  |
+| Delete file attachment           | Delete button in `AttachmentList` (uploader/owner only)                 | `DELETE /projects/{id}/tasks/{taskId}/attachments/{id}`        |
+| Paperclip badge on task cards    | `TaskCard` `attachmentCount` prop — shows 📎N when > 0                  | `attachments` count inferred from `AttachmentList` fetch       |
 
 > **Note:** The Kanban board and Dashboard are separate pages reachable via tab links from `ProjectDetailPage`. Both share the same project SSE connection for live updates.
 
@@ -1360,6 +2007,26 @@ User submits email/password
     → Backend returns { token, user }
     → AuthContext stores token & user in localStorage + state
     → React Router navigates to /projects
+```
+
+### Google OAuth2 Login Flow
+
+```
+User clicks "Continue with Google"
+    → Browser navigates to GET /oauth2/authorization/google
+    → Spring Security redirects to Google consent screen
+    → User authenticates with Google
+    → Google redirects to GET /login/oauth2/code/google?code=...
+    → OAuth2SuccessHandler fires:
+        → reads email, name, sub from OAuth2User
+        → finds or creates User in DB (upsert by google_id / email)
+        → generates JWT via JwtUtil.generateToken(user)
+        → redirects to {FRONTEND_URL}/oauth2/callback?token=JWT
+    → OAuth2CallbackPage mounts:
+        → reads token from URL params
+        → decodes JWT payload (base64) for user_id, name, email
+        → calls loginWithToken(token, user) → stored in localStorage + state
+        → navigates to /projects
 ```
 
 ### Create Task Flow
@@ -1398,6 +2065,7 @@ User drags task card to a different column
 | `db`       | `postgres:16`                    | 5432      | Volume-persisted, Flyway migrations auto-run on backend start |
 | `backend`  | Built from `backend/Dockerfile`  | 4000      | Requires `JWT_SECRET` env var                                 |
 | `frontend` | Built from `frontend/Dockerfile` | 5173 / 80 | Nginx serves the Vite build                                   |
+| `minio`    | `minio/minio:latest`             | 9002 / 9003 | Object storage. API on host port 9002 (maps to container 9000); console on 9003. Internal Docker hostname `minio:9000` used by the `api` service |
 
 **To run the full stack:**
 
@@ -1413,13 +2081,46 @@ docker-compose up --build
 
 ## 9. Seed Data (Test Credentials)
 
-After running migrations, two users are available immediately:
+After running migrations, the following users are available:
 
-| Name         | Email              | Password      |
-| ------------ | ------------------ | ------------- |
-| Test User    | `test@example.com` | `password123` |
-| Alex Johnson | `alex@example.com` | `password123` |
+| Name             | Email                      | Emp ID  | Password      |
+| ---------------- | -------------------------- | ------- | ------------- |
+| Test User        | `test@example.com`         | `test`  | `password123` |
+| Alex Johnson     | `alex@example.com`         | `are01` | `password123` |
+| Aman Choudhary   | `aman.choudhary@hrs.com`   | `ach51` | `password123` |
+| Gaganajeet Singh | `gaganajeet.singh@hrs.com` | `gsi50` | `password123` |
+| Umang Yadav      | `umang.yadav@hrs.com`      | `uya01` | `password123` |
 
 The auth page pre-fills `test@example.com` / `password123` to make demo login instant.
 
 One project ("Website Redesign") and three sample tasks are seeded so the app is not empty on first run.
+
+---
+
+## 10. Environment Variables Reference
+
+| Variable               | Required | Default                  | Description                                   |
+| ---------------------- | -------- | ------------------------ | --------------------------------------------- |
+| `JWT_SECRET`           | Yes      | —                        | HMAC-SHA256 signing secret (min 32 chars)     |
+| `POSTGRES_USER`        | No       | `taskflow`               | PostgreSQL username                           |
+| `POSTGRES_PASSWORD`    | No       | `taskflow`               | PostgreSQL password                           |
+| `POSTGRES_DB`          | No       | `taskflow`               | PostgreSQL database name                      |
+| `POSTGRES_PORT`        | No       | `5432`                   | Host port for PostgreSQL                      |
+| `API_PORT`             | No       | `4000`                   | Backend server port                           |
+| `VITE_API_URL`         | No       | `http://localhost:4000`  | API base URL used by the frontend             |
+| `FRONTEND_URL`         | No       | `http://localhost:5173`  | Where OAuth2 redirects after Google login     |
+| `GOOGLE_CLIENT_ID`     | No       | —                        | Google OAuth2 client ID (Sign in with Google) |
+| `GOOGLE_CLIENT_SECRET` | No       | —                        | Google OAuth2 client secret                   |
+| `MAIL_ENABLED`         | No       | `false`                  | Set `true` to activate hourly email digest    |
+| `MAIL_FROM`            | No       | `noreply@taskflow.local` | Sender address for digest emails              |
+| `MAIL_HOST`            | No       | `localhost`              | SMTP host                                     |
+| `MAIL_PORT`            | No       | `1025`                   | SMTP port                                     |
+| `MAIL_USERNAME`        | No       | —                        | SMTP authentication username                  |
+| `MAIL_PASSWORD`        | No       | —                        | SMTP authentication password                  |
+| `MINIO_USER`           | No       | `taskflow`               | MinIO root username (access key)              |
+| `MINIO_PASSWORD`       | No       | `taskflow123`            | MinIO root password (secret key)              |
+| `MINIO_ENDPOINT`       | No       | `http://minio:9000`      | MinIO endpoint used by the backend (internal Docker hostname) |
+| `MINIO_PUBLIC_ENDPOINT`| No       | `http://localhost:9002`  | MinIO endpoint reachable from the host (not used for downloads — API proxies all files) |
+| `MINIO_BUCKET`         | No       | `taskflow`               | Object storage bucket name                    |
+| `MINIO_PORT`           | No       | `9002`                   | Host port for MinIO API                       |
+| `MINIO_CONSOLE_PORT`   | No       | `9003`                   | Host port for MinIO web console               |

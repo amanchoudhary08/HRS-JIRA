@@ -1,5 +1,37 @@
 export type User = { id: string; name: string; email: string };
 
+export type Label = {
+  id: string;
+  name: string;
+  color: string;
+  project_id: string;
+};
+
+export type SearchResult = {
+  project_id: string;
+  project_name: string;
+  tasks: Task[];
+};
+
+export type Notification = {
+  id: string;
+  user_id: string;
+  type: string;
+  payload: Record<string, string>;
+  read: boolean;
+  created_at: string;
+};
+
+export type ActivityEvent = {
+  id: string;
+  type: string;
+  actor_name: string;
+  payload: Record<string, string>;
+  created_at: string;
+  task_id: string | null;
+  project_id: string;
+};
+
 export type ProjectMember = {
   project_id: string;
   user_id: string;
@@ -22,7 +54,7 @@ export type Task = {
   id: string;
   title: string;
   description: string;
-  status: "todo" | "in_progress" | "done";
+  status: "todo" | "in_progress" | "blocked" | "in_review" | "done";
   priority: "low" | "medium" | "high";
   type: "task" | "bug" | "story" | "epic";
   project_id: string;
@@ -32,8 +64,10 @@ export type Task = {
   sprint_id: string | null;
   position: number;
   due_date: string | null;
+  story_points: number | null;
   created_at: string;
   updated_at: string;
+  labels?: Label[];
 };
 
 export type Sprint = {
@@ -58,27 +92,6 @@ export type Comment = {
   updated_at: string;
 };
 
-export type ActivityEvent = {
-  id: string;
-  project_id: string;
-  task_id: string | null;
-  actor_id: string;
-  actor_name: string;
-  type: string;
-  payload: Record<string, string>;
-  created_at: string;
-};
-
-export type ProjectStats = {
-  total: number;
-  overdue: number;
-  by_status: { todo: number; in_progress: number; done: number };
-  by_assignee: { assignee_id: string; name: string; count: number }[];
-  by_type: { type: string; count: number }[];
-  by_sprint: { sprint: string; count: number }[];
-  daily_done: { date: string; count: number }[];
-};
-
 export type SSETaskEvent =
   | { type: "task_created"; data: Task }
   | { type: "task_updated"; data: Task }
@@ -91,8 +104,7 @@ export type SSETaskEvent =
   | {
       type: "comment_deleted";
       data: { id: string; task_id: string; project_id: string };
-    }
-  | { type: "activity_created"; data: ActivityEvent };
+    };
 
 export type AuthContextValue = {
   token: string | null;
@@ -100,4 +112,20 @@ export type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+};
+
+export type ProjectStats = {
+  total: number;
+  overdue: number;
+  by_status: {
+    todo: number;
+    in_progress: number;
+    blocked: number;
+    in_review: number;
+    done: number;
+  };
+  by_assignee: { assignee_id: string; name: string; count: number }[];
+  by_type: { type: string; count: number }[];
+  by_sprint: { sprint: string; count: number }[];
+  daily_done: { date: string; count: number }[];
 };

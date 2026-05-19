@@ -9,6 +9,7 @@ import com.taskflow.repository.ProjectMemberRepository;
 import com.taskflow.repository.ProjectRepository;
 import com.taskflow.repository.TaskRepository;
 import com.taskflow.service.ActivityService;
+import com.taskflow.service.NotificationService;
 import com.taskflow.sse.EventBroker;
 import com.taskflow.sse.SseEvent;
 import org.springframework.http.HttpStatus;
@@ -30,19 +31,22 @@ public class CommentController {
     private final ProjectMemberRepository memberRepo;
     private final EventBroker broker;
     private final ActivityService activityService;
+    private final NotificationService notificationService;
 
     public CommentController(ProjectRepository projectRepo,
                              TaskRepository taskRepo,
                              CommentRepository commentRepo,
                              ProjectMemberRepository memberRepo,
                              EventBroker broker,
-                             ActivityService activityService) {
+                             ActivityService activityService,
+                             NotificationService notificationService) {
         this.projectRepo = projectRepo;
         this.taskRepo = taskRepo;
         this.commentRepo = commentRepo;
         this.memberRepo = memberRepo;
         this.broker = broker;
         this.activityService = activityService;
+        this.notificationService = notificationService;
     }
 
     public record CreateCommentRequest(String body) {}
@@ -100,6 +104,16 @@ public class CommentController {
         broker.publish(projectId, new SseEvent("comment_added", dto));
         activityService.log(projectId, taskId, user.getId(), "comment_added",
                 ActivityService.payload("taskTitle", task.getTitle()));
+        // Notify task creator if they are not the commenter
+        UUID creatorId = task.getCreatedBy().getId();
+        if (!creatorId.equals(user.getId())) {
+            notificationService.notify(creatorId, "comment_added",
+                    NotificationService.payload(
+                            "taskId", task.getId().toString(),
+                            "taskTitle", task.getTitle(),
+                            "projectId", projectId.toString(),
+                            "commentBy", user.getName()));
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 

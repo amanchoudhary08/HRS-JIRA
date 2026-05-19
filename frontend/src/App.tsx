@@ -12,6 +12,8 @@ import { ProjectsPage } from "./pages/ProjectsPage";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 import { BoardPage } from "./pages/BoardPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { OAuth2CallbackPage } from "./pages/OAuth2CallbackPage";
+import { ApiReferencePage } from "./pages/ApiReferencePage";
 import "./main.css";
 
 function App() {
@@ -22,6 +24,7 @@ function App() {
           <Route path="/" element={<Navigate to="/projects" replace />} />
           <Route path="/login" element={<AuthPage mode="login" />} />
           <Route path="/register" element={<AuthPage mode="register" />} />
+          <Route path="/oauth2/callback" element={<OAuth2CallbackPage />} />
           <Route
             path="/projects"
             element={
@@ -51,6 +54,14 @@ function App() {
             element={
               <Protected>
                 <DashboardPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/api"
+            element={
+              <Protected>
+                <ApiReferencePage />
               </Protected>
             }
           />

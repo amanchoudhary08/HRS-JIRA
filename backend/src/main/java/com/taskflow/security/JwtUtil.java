@@ -42,6 +42,7 @@ public class JwtUtil {
         return Jwts.builder()
                 .claim("user_id", user.getId().toString())
                 .claim("email", user.getEmail())
+                .claim("name", user.getName())
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(key)

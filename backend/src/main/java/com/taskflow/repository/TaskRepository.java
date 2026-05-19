@@ -71,4 +71,36 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     // Stats: count overdue tasks (due_date < today and status != done)
     @Query("SELECT COUNT(t) FROM Task t WHERE t.project.id = :projectId AND t.dueDate < :today AND t.status <> 'done'")
     long countOverdueForProject(@Param("projectId") UUID projectId, @Param("today") LocalDate today);
+
+    // Full-text search within a single project (case-insensitive LIKE, title + description)
+    @Query("""
+        SELECT t FROM Task t
+        WHERE t.project.id = :projectId
+          AND (LOWER(t.title) LIKE LOWER(CONCAT('%', :q, '%'))
+               OR LOWER(COALESCE(t.description, '')) LIKE LOWER(CONCAT('%', :q, '%')))
+        ORDER BY t.updatedAt DESC
+        """)
+    List<Task> searchInProject(@Param("projectId") UUID projectId, @Param("q") String q, Pageable pageable);
+
+    // Full-text search across multiple projects
+    @Query("""
+        SELECT t FROM Task t
+        WHERE t.project.id IN :projectIds
+          AND (LOWER(t.title) LIKE LOWER(CONCAT('%', :q, '%'))
+               OR LOWER(COALESCE(t.description, '')) LIKE LOWER(CONCAT('%', :q, '%')))
+        ORDER BY t.updatedAt DESC
+        """)
+    List<Task> searchAcrossProjects(@Param("projectIds") List<UUID> projectIds, @Param("q") String q, Pageable pageable);
+
+    // Label filtering
+    @Query("""
+        SELECT DISTINCT t FROM Task t JOIN t.labels l
+        WHERE t.project.id = :projectId AND l.id = :labelId
+        ORDER BY t.createdAt DESC
+        """)
+    List<Task> findByProjectIdAndLabelId(@Param("projectId") UUID projectId, @Param("labelId") UUID labelId);
+
+    // Eagerly fetch labels for a list of task IDs (avoids N+1)
+    @Query("SELECT DISTINCT t FROM Task t LEFT JOIN FETCH t.labels WHERE t.id IN :ids")
+    List<Task> findWithLabelsByIdIn(@Param("ids") List<UUID> ids);
 }

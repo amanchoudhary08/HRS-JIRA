@@ -22,10 +22,12 @@ import { request } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useProjectEvents } from "../hooks/useProjectEvents";
 import { Layout } from "../components/Layout";
+import { ProjectSidebar } from "../components/ProjectSidebar";
 import { TaskCard } from "../components/TaskCard";
 import { TaskModal } from "../components/TaskModal";
 import { TypeIcon } from "../components/TypeIcon";
 import { ArrowLeftIcon } from "../components/icons";
+import * as cx from "../styles/classes";
 import type { Project, Sprint, SSETaskEvent, Task, User } from "../types";
 
 // ─── Sortable task wrapper ────────────────────────────────────────────────────
@@ -74,6 +76,8 @@ function SortableTaskCard({
 const COLUMNS: { id: Task["status"]; label: string }[] = [
   { id: "todo", label: "To Do" },
   { id: "in_progress", label: "In Progress" },
+  { id: "blocked", label: "Blocked" },
+  { id: "in_review", label: "In Review" },
   { id: "done", label: "Done" },
 ];
 
@@ -95,7 +99,7 @@ function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className="column"
+      className={cx.boardColumn}
       style={{
         flex: 1,
         minWidth: 240,
@@ -230,35 +234,38 @@ function CreateSprintModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className={cx.modalBackdrop} onClick={onClose}>
       <div
-        className="modal"
+        className={cx.modal}
         style={{ maxWidth: 420 }}
         onClick={(e) => e.stopPropagation()}
       >
         <h3 style={{ margin: "0 0 16px" }}>Create Sprint</h3>
-        {error && <div className="error">{error}</div>}
-        <form className="stack" onSubmit={submit}>
-          <label className="field">
-            <span>Sprint Name *</span>
+        {error && <div className={cx.errorBox}>{error}</div>}
+        <form className={cx.stack} onSubmit={submit}>
+          <label className={cx.field}>
+            <span className={cx.fieldLabel}>Sprint Name *</span>
             <input
+              className={cx.fieldInput}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Sprint 1"
             />
           </label>
-          <label className="field">
-            <span>Goal</span>
+          <label className={cx.field}>
+            <span className={cx.fieldLabel}>Goal</span>
             <input
+              className={cx.fieldInput}
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
               placeholder="What is the sprint goal?"
             />
           </label>
           <div style={{ display: "flex", gap: 10 }}>
-            <label className="field" style={{ flex: 1 }}>
-              <span>Start date *</span>
+            <label className={cx.field} style={{ flex: 1 }}>
+              <span className={cx.fieldLabel}>Start date *</span>
               <input
+                className={cx.fieldInput}
                 type="date"
                 value={startDate}
                 required
@@ -278,9 +285,10 @@ function CreateSprintModal({
                 }}
               />
             </label>
-            <label className="field" style={{ flex: 1 }}>
-              <span>End date *</span>
+            <label className={cx.field} style={{ flex: 1 }}>
+              <span className={cx.fieldLabel}>End date *</span>
               <input
+                className={cx.fieldInput}
                 type="date"
                 value={endDate}
                 required
@@ -311,14 +319,10 @@ function CreateSprintModal({
               marginTop: 8,
             }}
           >
-            <button
-              type="button"
-              className="button secondary"
-              onClick={onClose}
-            >
+            <button type="button" className={cx.btnSecondary} onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="button" disabled={loading}>
+            <button type="submit" className={cx.btn} disabled={loading}>
               {loading ? "Creating…" : "Create Sprint"}
             </button>
           </div>
@@ -345,6 +349,8 @@ export function BoardPage() {
   const [columns, setColumns] = useState<Record<Task["status"], Task[]>>({
     todo: [],
     in_progress: [],
+    blocked: [],
+    in_review: [],
     done: [],
   });
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -397,6 +403,8 @@ export function BoardPage() {
     setColumns({
       todo: sorted.filter((t) => t.status === "todo"),
       in_progress: sorted.filter((t) => t.status === "in_progress"),
+      blocked: sorted.filter((t) => t.status === "blocked"),
+      in_review: sorted.filter((t) => t.status === "in_review"),
       done: sorted.filter((t) => t.status === "done"),
     });
   }, [allTasks, selectedSprintId]);
@@ -619,13 +627,17 @@ export function BoardPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading)
     return (
-      <Layout>
+      <Layout sidebar={<ProjectSidebar projectId={projectId!} />}>
         <div style={{ padding: 32 }}>Loading board…</div>
       </Layout>
     );
 
   return (
-    <Layout>
+    <Layout
+      sidebar={<ProjectSidebar projectId={projectId!} />}
+      backTo={`/projects/${projectId}`}
+      backLabel="← Back to project"
+    >
       <div style={{ padding: "16px 24px" }}>
         {/* Header */}
         <div
@@ -636,20 +648,6 @@ export function BoardPage() {
             marginBottom: 16,
           }}
         >
-          <Link
-            to={`/projects/${projectId}`}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              color: "var(--text-muted)",
-              textDecoration: "none",
-              fontSize: 13,
-            }}
-          >
-            <ArrowLeftIcon />
-            Back
-          </Link>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
             {project?.name} — Board
           </h2>
@@ -662,14 +660,18 @@ export function BoardPage() {
             }}
           >
             <span
-              className={`live-badge${sseConnected ? " live-badge--on" : ""}`}
+              className={
+                sseConnected
+                  ? `${cx.liveBadge} ${cx.liveBadgeOn}`
+                  : cx.liveBadge
+              }
               title={sseConnected ? "Live" : "Offline"}
             />
           </div>
         </div>
 
         {error && (
-          <div className="error" style={{ marginBottom: 12 }}>
+          <div className={cx.errorBox} style={{ marginBottom: 12 }}>
             {error}
           </div>
         )}
@@ -685,14 +687,12 @@ export function BoardPage() {
           }}
         >
           <select
+            className={cx.fieldSelect}
             value={selectedSprintId}
             onChange={(e) => setSelectedSprintId(e.target.value)}
             style={{
               padding: "6px 10px",
               borderRadius: 6,
-              border: "1px solid var(--border-input)",
-              background: "var(--surface, var(--bg-card))",
-              color: "var(--text)",
               fontSize: 13,
             }}
           >
@@ -707,7 +707,7 @@ export function BoardPage() {
           {isOwnerOrAdmin && (
             <>
               <button
-                className="button secondary"
+                className={cx.btnSecondary}
                 style={{ fontSize: 12, padding: "5px 12px" }}
                 onClick={() => setShowCreateSprint(true)}
               >
@@ -715,7 +715,7 @@ export function BoardPage() {
               </button>
               {currentSprint && currentSprint.status === "planning" && (
                 <button
-                  className="button"
+                  className={cx.btn}
                   style={{
                     fontSize: 12,
                     padding: "5px 12px",
@@ -728,7 +728,7 @@ export function BoardPage() {
               )}
               {currentSprint && currentSprint.status === "active" && (
                 <button
-                  className="button"
+                  className={cx.btn}
                   style={{
                     fontSize: 12,
                     padding: "5px 12px",
@@ -744,7 +744,7 @@ export function BoardPage() {
 
           <div style={{ marginLeft: "auto" }}>
             <button
-              className="button"
+              className={cx.btn}
               style={{ fontSize: 12, padding: "5px 14px" }}
               onClick={() => setShowCreateTask(true)}
             >
@@ -981,7 +981,7 @@ function BacklogSection({
             {/* Assignee avatar */}
             {users.find((u) => u.id === t.assignee_id) && (
               <span
-                className="member-avatar member-avatar--sm"
+                className={cx.memberAvatarSm}
                 title={users.find((u) => u.id === t.assignee_id)?.name}
                 style={{ fontSize: 9, width: 20, height: 20, flexShrink: 0 }}
               >
@@ -996,7 +996,7 @@ function BacklogSection({
             )}
 
             <button
-              className="button secondary"
+              className={cx.btnSecondary}
               style={{ fontSize: 11, padding: "3px 10px", flexShrink: 0 }}
               onClick={(e) => {
                 e.stopPropagation();

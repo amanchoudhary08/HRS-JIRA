@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { Layout } from "../components/Layout";
 import { Field } from "../components/Field";
 import type { Project, ProjectMember } from "../types";
+import * as cx from "../styles/classes";
 
 function avatarInitials(name: string): string {
   if (!name) return "?";
@@ -17,21 +18,14 @@ function MemberAvatars({ members }: { members: ProjectMember[] }) {
   const visible = members.slice(0, 5);
   const overflow = members.length - visible.length;
   return (
-    <div className="avatar-stack">
+    <div className={cx.avatarStack}>
       {visible.map((m) => (
-        <div
-          className="member-avatar member-avatar--sm"
-          key={m.user_id}
-          title={m.user_name}
-        >
+        <div className={cx.memberAvatarSm} key={m.user_id} title={m.user_name}>
           {avatarInitials(m.user_name)}
         </div>
       ))}
       {overflow > 0 && (
-        <div
-          className="member-avatar member-avatar--sm member-avatar--overflow"
-          title={`+${overflow} more`}
-        >
+        <div className={cx.memberAvatarOverflow} title={`+${overflow} more`}>
           +{overflow}
         </div>
       )}
@@ -94,50 +88,54 @@ export function ProjectsPage() {
 
   return (
     <Layout>
-      <div className="toolbar">
+      <div className={cx.toolbar}>
         <div>
-          <h1 className="title">Projects</h1>
-          <p className="subtitle">Work you own or have tasks assigned in.</p>
+          <h1 className={cx.pageTitle}>Projects</h1>
+          <p className={cx.pageSubtitle}>
+            Work you own or have tasks assigned in.
+          </p>
         </div>
       </div>
-      {error && <p className="error">{error}</p>}
-      <form className="card stack" onSubmit={createProject}>
-        <div className="grid">
+      {error && <p className={cx.errorBox}>{error}</p>}
+      <form className={`${cx.card} ${cx.stack}`} onSubmit={createProject}>
+        <div className={cx.autoGrid}>
           <Field label="Project name">
             <input
+              className={cx.fieldInput}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Mobile release"
+              placeholder="Give a project name"
             />
           </Field>
           <Field label="Description">
             <input
+              className={cx.fieldInput}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional notes"
+              placeholder="Give description here (optional)"
             />
           </Field>
         </div>
-        <button className="button">Create project</button>
+        <button className={cx.btn}>Create project</button>
       </form>
       <div style={{ height: 20 }} />
       {loading ? (
-        <div className="empty">Loading projects...</div>
+        <div className={cx.empty}>Loading projects...</div>
       ) : projects.length === 0 ? (
-        <div className="empty">
+        <div className={cx.empty}>
           No projects yet. Create one to start planning.
         </div>
       ) : (
         <>
-          <div className="grid">
+          <div className={cx.autoGrid} style={{ gridTemplateColumns: "1fr" }}>
             {projects.map((project) => (
               <Link
-                className="card project-link"
+                className={`${cx.card} ${cx.projectLink}`}
                 key={project.id}
                 to={`/projects/${project.id}`}
               >
                 <h2>{project.name}</h2>
-                <p className="muted">
+                <p className="text-text-muted">
                   {project.description || "No description yet."}
                 </p>
                 <div
@@ -153,25 +151,25 @@ export function ProjectsPage() {
                   ) : (
                     <span />
                   )}
-                  <span className="pill">Open</span>
+                  <span className={cx.pill}>Open</span>
                 </div>
               </Link>
             ))}
           </div>
           {totalPages > 1 && (
-            <div className="pagination">
+            <div className={cx.pagination}>
               <button
-                className="button secondary"
+                className={cx.btnSecondary}
                 disabled={page === 1}
                 onClick={() => setPage((p) => p - 1)}
               >
                 ← Prev
               </button>
-              <span className="pagination-info">
+              <span className={cx.paginationInfo}>
                 Page {page} of {totalPages}
               </span>
               <button
-                className="button secondary"
+                className={cx.btnSecondary}
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >

@@ -22,9 +22,11 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final OAuth2SuccessHandler oauth2SuccessHandler;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, OAuth2SuccessHandler oauth2SuccessHandler) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.oauth2SuccessHandler = oauth2SuccessHandler;
     }
 
     @Bean
@@ -32,15 +34,17 @@ public class SecurityConfig {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsSource()))
-            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, "/auth/register", "/auth/login").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/healthz").permitAll()
                 .requestMatchers(HttpMethod.GET, "/projects/*/events").permitAll()
+                .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                 .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated()
             )
+            .oauth2Login(oauth2 -> oauth2.successHandler(oauth2SuccessHandler))
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint((req, res, e) -> {
                     res.setContentType("application/json");

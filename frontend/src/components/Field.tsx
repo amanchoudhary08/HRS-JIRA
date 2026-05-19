@@ -1,4 +1,5 @@
 import React from "react";
+import * as cx from "../styles/classes";
 
 export function Field({
   label,
@@ -8,8 +9,8 @@ export function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="field">
-      <span>{label}</span>
+    <label className={cx.field}>
+      <span className={cx.fieldLabel}>{label}</span>
       {children}
     </label>
   );

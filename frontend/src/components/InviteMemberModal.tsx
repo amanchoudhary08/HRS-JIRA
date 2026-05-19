@@ -1,6 +1,7 @@
 import React, { FormEvent, useState } from "react";
 import { Field } from "./Field";
 import type { ProjectMember } from "../types";
+import * as cx from "../styles/classes";
 
 interface InviteMemberModalProps {
   projectId: string;
@@ -45,19 +46,20 @@ export function InviteMemberModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className={cx.modalBackdrop} onClick={onClose}>
       <div
-        className="modal"
+        className={cx.modal}
         role="dialog"
         aria-modal="true"
         aria-label="Invite member"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{ marginTop: 0 }}>Invite member</h2>
-        {error && <p className="error">{error}</p>}
-        <form className="stack" onSubmit={handleSubmit}>
+        {error && <p className={cx.errorBox}>{error}</p>}
+        <form className={cx.stack} onSubmit={handleSubmit}>
           <Field label="User email">
             <input
+              className={cx.fieldInput}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -67,6 +69,7 @@ export function InviteMemberModal({
           </Field>
           <Field label="Role">
             <select
+              className={cx.fieldSelect}
               value={role}
               onChange={(e) => setRole(e.target.value as typeof role)}
             >
@@ -80,17 +83,13 @@ export function InviteMemberModal({
             </select>
           </Field>
           <div
-            className="row"
+            className={cx.row}
             style={{ justifyContent: "flex-end", gap: 10, marginTop: 4 }}
           >
-            <button
-              className="button secondary"
-              type="button"
-              onClick={onClose}
-            >
+            <button className={cx.btnSecondary} type="button" onClick={onClose}>
               Cancel
             </button>
-            <button className="button" type="submit" disabled={loading}>
+            <button className={cx.btn} type="submit" disabled={loading}>
               {loading ? "Inviting…" : "Invite"}
             </button>
           </div>

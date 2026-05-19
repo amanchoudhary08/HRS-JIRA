@@ -51,6 +51,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(null);
         setUser(null);
       },
+      loginWithToken: (token: string, user: User) => {
+        localStorage.setItem("taskflow_token", token);
+        localStorage.setItem("taskflow_user", JSON.stringify(user));
+        setToken(token);
+        setUser(user);
+      },
     }),
     [token, user],
   );

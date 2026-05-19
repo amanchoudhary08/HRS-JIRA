@@ -6,19 +6,29 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { request } from "../api/client";
+import {
+  fetchLabels,
+  createLabel,
+  updateLabel,
+  deleteLabel,
+} from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useProjectEvents } from "../hooks/useProjectEvents";
 import { Layout } from "../components/Layout";
+import { ProjectSidebar } from "../components/ProjectSidebar";
 import { Field } from "../components/Field";
 import { TaskModal } from "../components/TaskModal";
 import { MemberList } from "../components/MemberList";
 import { InviteMemberModal } from "../components/InviteMemberModal";
 import { TypeIcon } from "../components/TypeIcon";
 import { ActivityFeed } from "../components/ActivityFeed";
+import { LabelChip } from "../components/LabelChip";
 import { labelStatus } from "../utils/labelStatus";
 import { ArrowLeftIcon } from "../components/icons";
+import * as cx from "../styles/classes";
 import type {
   ActivityEvent,
+  Label,
   Project,
   ProjectMember,
   Sprint,
@@ -27,7 +37,7 @@ import type {
   User,
 } from "../types";
 
-type ActiveTab = "tasks" | "members" | "activity";
+type ActiveTab = "tasks" | "members" | "activity" | "labels";
 
 export function ProjectDetailPage() {
   const { id } = useParams();
@@ -76,7 +86,9 @@ export function ProjectDetailPage() {
   const [taskPage, setTaskPage] = useState(1);
   const [taskTotal, setTaskTotal] = useState(0);
   const TASK_LIMIT = 20;
-  const [activeTab, setActiveTab] = useState<ActiveTab>("tasks");
+  const [activeTab, setActiveTab] = useState<ActiveTab>(
+    (searchParams.get("tab") as ActiveTab) ?? "tasks",
+  );
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [showInvite, setShowInvite] = useState(false);
   const [latestCommentEvent, setLatestCommentEvent] =
@@ -84,6 +96,16 @@ export function ProjectDetailPage() {
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [sprints, setSprints] = useState<Sprint[]>([]);
+  const [labels, setLabels] = useState<Label[]>([]);
+  // Label filter
+  const [labelFilter, setLabelFilter] = useState("");
+  // New label form
+  const [newLabelName, setNewLabelName] = useState("");
+  const [newLabelColor, setNewLabelColor] = useState("#6366f1");
+  const [savingLabel, setSavingLabel] = useState(false);
+  const [editingLabel, setEditingLabel] = useState<Label | null>(null);
+  const [editLabelName, setEditLabelName] = useState("");
+  const [editLabelColor, setEditLabelColor] = useState("");
 
   const sseConnected = useProjectEvents(
     id,
@@ -154,6 +176,12 @@ export function ProjectDetailPage() {
       .catch(() => {
         /* sprints non-critical */
       });
+    // Load labels (non-blocking)
+    if (id && token) {
+      fetchLabels(id, token)
+        .then((data) => setLabels(data.labels))
+        .catch(() => {});
+    }
   }
 
   useEffect(() => {
@@ -303,10 +331,23 @@ export function ProjectDetailPage() {
   const myRole = members.find((m) => m.user_id === user?.id)?.role ?? "viewer";
   const canEdit = myRole !== "viewer";
 
+  // Filter tasks by label (client-side on current page)
+  const visibleTasks = labelFilter
+    ? tasks.filter((t) => t.labels?.some((l) => l.id === labelFilter))
+    : tasks;
+
+  function taskInitials(name: string) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
   const grouped = {
-    todo: tasks.filter((t) => t.status === "todo"),
-    in_progress: tasks.filter((t) => t.status === "in_progress"),
-    done: tasks.filter((t) => t.status === "done"),
+    todo: visibleTasks.filter((t) => t.status === "todo"),
+    in_progress: visibleTasks.filter((t) => t.status === "in_progress"),
+    blocked: visibleTasks.filter((t) => t.status === "blocked"),
+    in_review: visibleTasks.filter((t) => t.status === "in_review"),
+    done: visibleTasks.filter((t) => t.status === "done"),
   };
 
   const [dragOverCol, setDragOverCol] = useState<Task["status"] | null>(null);
@@ -332,57 +373,48 @@ export function ProjectDetailPage() {
     }
   }
 
+  const sidebarEl = (
+    <ProjectSidebar
+      projectId={id!}
+      activeTab={activeTab}
+      onTabChange={(tab) => setActiveTab(tab as ActiveTab)}
+      memberCount={members.length}
+      labelCount={labels.length}
+    />
+  );
+
   return (
-    <Layout>
-      <Link
-        to="/projects"
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          marginBottom: 20,
-          color: "var(--text-muted)",
-          textDecoration: "none",
-          fontSize: "0.9rem",
-          fontWeight: 600,
-          transition: "color 0.15s",
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--brand)")}
-        onMouseLeave={(e) =>
-          (e.currentTarget.style.color = "var(--text-muted)")
-        }
-      >
-        <ArrowLeftIcon />
-        Back to projects
-      </Link>
+    <Layout sidebar={sidebarEl} backTo="/projects">
       {loading ? (
-        <div className="empty">Loading project...</div>
+        <div className={cx.empty}>Loading project...</div>
       ) : project ? (
         <>
           {editingProject ? (
             <form
-              className="card stack"
+              className={`${cx.card} ${cx.stack}`}
               style={{ marginBottom: 20 }}
               onSubmit={saveProject}
             >
               <Field label="Project name">
                 <input
+                  className={cx.fieldInput}
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                 />
               </Field>
               <Field label="Description">
                 <input
+                  className={cx.fieldInput}
                   value={projectDescription}
                   onChange={(e) => setProjectDescription(e.target.value)}
                 />
               </Field>
-              <div className="row">
-                <button className="button" type="submit">
+              <div className={cx.row}>
+                <button className={cx.btn} type="submit">
                   Save
                 </button>
                 <button
-                  className="button secondary"
+                  className={cx.btnSecondary}
                   type="button"
                   onClick={() => setEditingProject(false)}
                 >
@@ -391,16 +423,20 @@ export function ProjectDetailPage() {
               </div>
             </form>
           ) : (
-            <div className="toolbar">
+            <div className={cx.toolbar}>
               <div>
-                <h1 className="title">{project.name}</h1>
-                <p className="subtitle">
+                <h1 className={cx.pageTitle}>{project.name}</h1>
+                <p className={cx.pageSubtitle}>
                   {project.description || "No description yet."}
                 </p>
               </div>
-              <div className="row">
+              <div className={cx.row}>
                 <span
-                  className={`live-badge${sseConnected ? " live-badge--on" : ""}`}
+                  className={
+                    sseConnected
+                      ? `${cx.liveBadge} ${cx.liveBadgeOn}`
+                      : cx.liveBadge
+                  }
                   title={
                     sseConnected
                       ? "Receiving real-time updates"
@@ -412,7 +448,7 @@ export function ProjectDetailPage() {
                 {project.owner_id === user?.id && (
                   <>
                     <button
-                      className="button secondary"
+                      className={cx.btnSecondary}
                       onClick={() => {
                         setProjectName(project.name);
                         setProjectDescription(project.description);
@@ -421,79 +457,43 @@ export function ProjectDetailPage() {
                     >
                       Edit project
                     </button>
-                    <button className="button danger" onClick={deleteProject}>
+                    <button className={cx.btnDanger} onClick={deleteProject}>
                       Delete project
                     </button>
                   </>
                 )}
                 {canEdit && (
-                  <button className="button" onClick={() => setShowCreate(true)}>
+                  <button
+                    className={cx.btn}
+                    onClick={() => setShowCreate(true)}
+                  >
                     New task
                   </button>
                 )}
               </div>
             </div>
           )}
-          {error && <p className="error">{error}</p>}
-          {/* Tab switcher */}
-          <div className="tab-bar">
-            <button
-              className={`tab-btn${activeTab === "tasks" ? " tab-btn--active" : ""}`}
-              onClick={() => setActiveTab("tasks")}
-            >
-              Tasks
-            </button>
-            <button
-              className={`tab-btn${activeTab === "members" ? " tab-btn--active" : ""}`}
-              onClick={() => setActiveTab("members")}
-            >
-              Members
-              <span
-                className="pill"
-                style={{ marginLeft: 6, fontSize: "0.75rem" }}
-              >
-                {members.length}
-              </span>
-            </button>
-            <button
-              className={`tab-btn${activeTab === "activity" ? " tab-btn--active" : ""}`}
-              onClick={() => setActiveTab("activity")}
-            >
-              Activity
-            </button>
-            <Link
-              to={`/projects/${id}/board`}
-              className="tab-btn"
-              style={{ textDecoration: "none" }}
-            >
-              Board ⚡
-            </Link>
-            <Link
-              to={`/projects/${id}/dashboard`}
-              className="tab-btn"
-              style={{ textDecoration: "none" }}
-            >
-              Dashboard 📊
-            </Link>
-          </div>
-
-          {/* ─── Tasks tab ─── */}
+          {error && <p className={cx.errorBox}>{error}</p>}
           {activeTab === "tasks" && (
             <>
-              <div className="card filters">
+              <div className={`${cx.card} ${cx.filters}`}>
                 <Field label="Status filter">
                   <select
+                    className={cx.fieldSelect}
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
                   >
                     <option value="">All statuses</option>
                     <option value="todo">Todo</option>
-                    <option value="in_progress">In progress</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="blocked">Blocked</option>
+                    <option value="in_review">In Review</option>
                     <option value="done">Done</option>
                   </select>
                 </Field>
                 <Field label="Assignee filter">
                   <select
+                    className={cx.fieldSelect}
                     value={assignee}
                     onChange={(e) => setAssignee(e.target.value)}
                   >
@@ -505,12 +505,43 @@ export function ProjectDetailPage() {
                     ))}
                   </select>
                 </Field>
+                {labels.length > 0 && (
+                  <Field label="Label filter">
+                    <select
+                      className={cx.fieldSelect}
+                      value={labelFilter}
+                      onChange={(e) => setLabelFilter(e.target.value)}
+                    >
+                      <option value="">All labels</option>
+                      {labels.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
               </div>
               <div style={{ height: 20 }} />
-              <div className="grid">
-                {(["todo", "in_progress", "done"] as const).map((key) => (
+              <div
+                className="grid grid-cols-[repeat(5,minmax(0,1fr))]"
+                style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}
+              >
+                {(
+                  [
+                    "todo",
+                    "in_progress",
+                    "blocked",
+                    "in_review",
+                    "done",
+                  ] as const
+                ).map((key) => (
                   <section
-                    className={`column${dragOverCol === key ? " column--drag-over" : ""}`}
+                    className={
+                      dragOverCol === key
+                        ? cx.boardColumnDragOver
+                        : cx.boardColumn
+                    }
                     key={key}
                     onDragOver={(e) => handleDragOver(e, key)}
                     onDragLeave={() => setDragOverCol(null)}
@@ -518,14 +549,16 @@ export function ProjectDetailPage() {
                   >
                     <h3>
                       {labelStatus(key)}{" "}
-                      <span className="pill">{grouped[key].length}</span>
+                      <span className={cx.pill}>{grouped[key].length}</span>
                     </h3>
                     {grouped[key].length === 0 ? (
-                      <div className="empty column-empty">No tasks here.</div>
+                      <div className={cx.empty + " py-4 text-sm"}>
+                        No tasks here.
+                      </div>
                     ) : (
                       grouped[key].map((task) => (
                         <article
-                          className="card task-card"
+                          className={cx.taskCard}
                           key={task.id}
                           draggable
                           onDragStart={(e) => handleDragStart(e, task.id)}
@@ -545,7 +578,7 @@ export function ProjectDetailPage() {
                                 style={{ flexShrink: 0 }}
                               />
                               <span
-                                className="muted"
+                                className="text-text-muted"
                                 style={{
                                   fontSize: "0.75rem",
                                   fontFamily: "monospace",
@@ -554,42 +587,57 @@ export function ProjectDetailPage() {
                               >
                                 #{task.id.slice(0, 8)}
                               </span>
-                              <h3 style={{ margin: 0 }}>{task.title}</h3>
+                              <h3 style={{ margin: 0, fontSize: 14 }}>
+                                {task.title}
+                              </h3>
                             </div>
-                            <p className="muted">
+                            <p
+                              className="text-text-muted"
+                              style={{ margin: "4px 0 0", fontSize: 13 }}
+                            >
                               {task.description || "No description."}
                             </p>
                           </div>
-                          <div className="row">
-                            <span className={`pill priority-${task.priority}`}>
+                          <div className={cx.row} style={{ marginTop: 8 }}>
+                            <span className={cx.priorityClass(task.priority)}>
                               {task.priority}
                             </span>
-                            <span className="pill">
-                              {users.find((u) => u.id === task.assignee_id)
-                                ?.name || "Unassigned"}
+                            {task.story_points != null && (
+                              <span
+                                className="text-text-muted"
+                                style={{ fontSize: "0.75rem" }}
+                              >
+                                {task.story_points} pts
+                              </span>
+                            )}
+                            <span className={cx.pill}>
+                              {(() => {
+                                const u = users.find(
+                                  (u) => u.id === task.assignee_id,
+                                );
+                                return u ? taskInitials(u.name) : "?";
+                              })()}
                             </span>
                           </div>
-                          {task.due_date && (
-                            <span className="muted">Due {task.due_date}</span>
+                          {task.labels && task.labels.length > 0 && (
+                            <div
+                              className={cx.row}
+                              style={{
+                                marginTop: 4,
+                                flexWrap: "wrap",
+                                gap: 4,
+                              }}
+                            >
+                              {task.labels.map((l) => (
+                                <LabelChip key={l.id} label={l} />
+                              ))}
+                            </div>
                           )}
                           {canEdit && (
-                            <div className="row">
-                              <select
-                                value={task.status}
-                                onClick={(e) => e.stopPropagation()}
-                                onChange={(e) =>
-                                  optimisticStatus(
-                                    task,
-                                    e.target.value as Task["status"],
-                                  )
-                                }
-                              >
-                                <option value="todo">Todo</option>
-                                <option value="in_progress">In progress</option>
-                                <option value="done">Done</option>
-                              </select>
+                            <div className={cx.row} style={{ marginTop: 6 }}>
                               <button
-                                className="button secondary"
+                                className={cx.btnSecondary}
+                                style={{ fontSize: 11, padding: "2px 8px" }}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setEditing(task);
@@ -598,7 +646,8 @@ export function ProjectDetailPage() {
                                 Edit
                               </button>
                               <button
-                                className="button danger"
+                                className={cx.btnDanger}
+                                style={{ fontSize: 11, padding: "2px 8px" }}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   void deleteTask(task.id);
@@ -621,6 +670,7 @@ export function ProjectDetailPage() {
                   task={editing}
                   users={users}
                   sprints={sprints}
+                  allLabels={labels}
                   currentUser={user}
                   commentEvent={latestCommentEvent}
                   canEdit={canEdit}
@@ -633,19 +683,19 @@ export function ProjectDetailPage() {
                 />
               )}
               {Math.ceil(taskTotal / TASK_LIMIT) > 1 && (
-                <div className="pagination" style={{ marginTop: 24 }}>
+                <div className={cx.pagination} style={{ marginTop: 24 }}>
                   <button
-                    className="button secondary"
+                    className={cx.btnSecondary}
                     disabled={taskPage === 1}
                     onClick={() => setTaskPage((p) => p - 1)}
                   >
                     ← Prev
                   </button>
-                  <span className="pagination-info">
+                  <span className={cx.paginationInfo}>
                     Page {taskPage} of {Math.ceil(taskTotal / TASK_LIMIT)}
                   </span>
                   <button
-                    className="button secondary"
+                    className={cx.btnSecondary}
                     disabled={taskPage >= Math.ceil(taskTotal / TASK_LIMIT)}
                     onClick={() => setTaskPage((p) => p + 1)}
                   >
@@ -654,6 +704,187 @@ export function ProjectDetailPage() {
                 </div>
               )}
             </>
+          )}
+
+          {/* ─── Labels tab ─── */}
+          {activeTab === "labels" && (
+            <div style={{ marginTop: 20 }}>
+              <div
+                className={`${cx.card} ${cx.stack}`}
+                style={{ marginBottom: 20 }}
+              >
+                <h3 style={{ margin: "0 0 12px 0", fontSize: "1rem" }}>
+                  Create label
+                </h3>
+                <form
+                  className={cx.row}
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!newLabelName.trim() || !id || !token) return;
+                    setSavingLabel(true);
+                    try {
+                      const created = await createLabel(
+                        id,
+                        { name: newLabelName.trim(), color: newLabelColor },
+                        token,
+                      );
+                      setLabels((prev) => [...prev, created]);
+                      setNewLabelName("");
+                      setNewLabelColor("#6366f1");
+                    } catch (err) {
+                      setError(
+                        err instanceof Error
+                          ? err.message
+                          : "Could not create label",
+                      );
+                    } finally {
+                      setSavingLabel(false);
+                    }
+                  }}
+                >
+                  <input
+                    className={cx.fieldInput}
+                    placeholder="Label name"
+                    value={newLabelName}
+                    onChange={(e) => setNewLabelName(e.target.value)}
+                    required
+                    style={{ flex: 1 }}
+                  />
+                  <input
+                    type="color"
+                    value={newLabelColor}
+                    onChange={(e) => setNewLabelColor(e.target.value)}
+                    style={{ width: 40, padding: 2, cursor: "pointer" }}
+                    title="Pick a colour"
+                  />
+                  <button className={cx.btn} disabled={savingLabel}>
+                    {savingLabel ? "Saving..." : "+ Create"}
+                  </button>
+                </form>
+              </div>
+
+              {labels.length === 0 ? (
+                <div className={cx.empty}>No labels yet. Create one above.</div>
+              ) : (
+                <div className={cx.stack} style={{ gap: 8 }}>
+                  {labels.map((label) =>
+                    editingLabel?.id === label.id ? (
+                      <div
+                        key={label.id}
+                        className={`${cx.card} ${cx.row}`}
+                        style={{ alignItems: "center", gap: 10 }}
+                      >
+                        <input
+                          className={cx.fieldInput}
+                          value={editLabelName}
+                          onChange={(e) => setEditLabelName(e.target.value)}
+                          style={{ flex: 1 }}
+                        />
+                        <input
+                          type="color"
+                          value={editLabelColor}
+                          onChange={(e) => setEditLabelColor(e.target.value)}
+                          style={{
+                            width: 40,
+                            padding: 2,
+                            cursor: "pointer",
+                          }}
+                        />
+                        <button
+                          className={cx.btn}
+                          onClick={async () => {
+                            if (!id || !token) return;
+                            try {
+                              const updated = await updateLabel(
+                                id,
+                                label.id,
+                                {
+                                  name: editLabelName,
+                                  color: editLabelColor,
+                                },
+                                token,
+                              );
+                              setLabels((prev) =>
+                                prev.map((l) =>
+                                  l.id === updated.id ? updated : l,
+                                ),
+                              );
+                              setEditingLabel(null);
+                            } catch (err) {
+                              setError(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Could not update label",
+                              );
+                            }
+                          }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          className={cx.btnSecondary}
+                          onClick={() => setEditingLabel(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        key={label.id}
+                        className={`${cx.card} ${cx.row}`}
+                        style={{ alignItems: "center", gap: 10 }}
+                      >
+                        <LabelChip label={label} />
+                        <span
+                          className="text-text-muted"
+                          style={{ fontSize: "0.8rem", marginLeft: 4 }}
+                        >
+                          {label.color}
+                        </span>
+                        <div style={{ marginLeft: "auto" }} className={cx.row}>
+                          <button
+                            className={cx.btnSecondary}
+                            onClick={() => {
+                              setEditingLabel(label);
+                              setEditLabelName(label.name);
+                              setEditLabelColor(label.color);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className={cx.btnDanger}
+                            onClick={async () => {
+                              if (
+                                !window.confirm(`Delete label "${label.name}"?`)
+                              )
+                                return;
+                              if (!id || !token) return;
+                              try {
+                                await deleteLabel(id, label.id, token);
+                                setLabels((prev) =>
+                                  prev.filter((l) => l.id !== label.id),
+                                );
+                                if (labelFilter === label.id)
+                                  setLabelFilter("");
+                              } catch (err) {
+                                setError(
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Could not delete label",
+                                );
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {/* ─── Members tab ─── */}
@@ -667,7 +898,7 @@ export function ProjectDetailPage() {
                 )) && (
                 <div style={{ marginBottom: 16 }}>
                   <button
-                    className="button"
+                    className={cx.btn}
                     onClick={() => setShowInvite(true)}
                   >
                     + Invite member
@@ -687,7 +918,7 @@ export function ProjectDetailPage() {
           {/* ─── Activity tab ─── */}
           {activeTab === "activity" && (
             <div style={{ marginTop: 20 }}>
-              <div className="card" style={{ padding: "16px 20px" }}>
+              <div className={cx.card} style={{ padding: "16px 20px" }}>
                 <h3 style={{ margin: "0 0 14px 0", fontSize: "1rem" }}>
                   Project Activity
                 </h3>
@@ -709,7 +940,7 @@ export function ProjectDetailPage() {
           )}
         </>
       ) : (
-        <div className="empty">Project not found.</div>
+        <div className={cx.empty}>Project not found.</div>
       )}
     </Layout>
   );

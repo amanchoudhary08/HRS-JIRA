@@ -27,6 +27,9 @@ public class User {
     @Column(name = "emp_id", unique = true)
     private String empId;
 
+    @Column(name = "google_id", unique = true)
+    private String googleId;
+
     @Column(nullable = false)
     private String password;
 

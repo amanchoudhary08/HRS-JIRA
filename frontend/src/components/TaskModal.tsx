@@ -2,16 +2,9 @@ import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { request } from "../api/client";
 import { Field } from "./Field";
 import { TypeIcon } from "./TypeIcon";
-import { ActivityFeed } from "./ActivityFeed";
 import { labelStatus } from "../utils/labelStatus";
-import type {
-  ActivityEvent,
-  Comment,
-  Sprint,
-  SSETaskEvent,
-  Task,
-  User,
-} from "../types";
+import * as cx from "../styles/classes";
+import type { Comment, SSETaskEvent, Task, User } from "../types";
 
 function timeAgo(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -35,10 +28,8 @@ export function TaskModal({
   token,
   task,
   users,
-  sprints = [],
   currentUser,
   commentEvent,
-  canEdit = true,
   onClose,
   onSaved,
   onOpenTask,
@@ -47,10 +38,8 @@ export function TaskModal({
   token: string | null;
   task: Task | null;
   users: User[];
-  sprints?: Sprint[];
   currentUser: User | null;
   commentEvent?: SSETaskEvent | null;
-  canEdit?: boolean;
   onClose: () => void;
   onSaved: (task: Task) => void;
   onOpenTask?: (task: Task) => void;
@@ -66,7 +55,9 @@ export function TaskModal({
     task ? (task.assignee_id ?? "") : (currentUser?.id ?? ""),
   );
   const [dueDate, setDueDate] = useState(task?.due_date ?? "");
-  const [sprintId, setSprintId] = useState(task?.sprint_id ?? "");
+  const [storyPoints, setStoryPoints] = useState<string>(
+    task?.story_points != null ? String(task.story_points) : "",
+  );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -89,10 +80,6 @@ export function TaskModal({
   const [editingCommentBody, setEditingCommentBody] = useState("");
   const commentEndRef = useRef<HTMLDivElement>(null);
 
-  // Activity state
-  const [taskActivity, setTaskActivity] = useState<ActivityEvent[]>([]);
-  const [loadingActivity, setLoadingActivity] = useState(false);
-
   // Sync all fields whenever the task prop changes
   useEffect(() => {
     setTitle(task?.title ?? "");
@@ -102,7 +89,7 @@ export function TaskModal({
     setTaskType(task?.type ?? "task");
     setAssignee(task ? (task.assignee_id ?? "") : (currentUser?.id ?? ""));
     setDueDate(task?.due_date ?? "");
-    setSprintId(task?.sprint_id ?? "");
+    setStoryPoints(task?.story_points != null ? String(task.story_points) : "");
     setError("");
     setSubtasks([]);
     setParentTask(null);
@@ -113,7 +100,6 @@ export function TaskModal({
   useEffect(() => {
     if (!task) {
       setComments([]);
-      setTaskActivity([]);
       return;
     }
     setLoadingComments(true);
@@ -124,16 +110,6 @@ export function TaskModal({
       .then((data) => setComments(data.comments))
       .catch(() => setComments([]))
       .finally(() => setLoadingComments(false));
-
-    // Load task activity
-    setLoadingActivity(true);
-    request<{ activity: ActivityEvent[] }>(
-      `/projects/${projectId}/tasks/${task.id}/activity`,
-      { token },
-    )
-      .then((data) => setTaskActivity(data.activity))
-      .catch(() => setTaskActivity([]))
-      .finally(() => setLoadingActivity(false));
 
     // Only load subtasks if this task is NOT itself a subtask
     if (!task.parent_id) {
@@ -179,21 +155,13 @@ export function TaskModal({
       if (d.task_id === task.id) {
         setComments((prev) => prev.filter((x) => x.id !== d.id));
       }
-    } else if (commentEvent.type === "activity_created") {
-      const a = commentEvent.data;
-      if (a.task_id === task.id) {
-        setTaskActivity((prev) =>
-          prev.some((x) => x.id === a.id) ? prev : [a, ...prev],
-        );
-      }
     }
   }, [commentEvent]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!title.trim()) return setError("Title is required.");
-    if (!dueDate) return setError("Due date is required.");
-    if (dueDate < new Date().toISOString().split("T")[0]) {
+    if (dueDate && dueDate < new Date().toISOString().split("T")[0]) {
       return setError("Due date cannot be in the past.");
     }
     setSaving(true);
@@ -206,7 +174,7 @@ export function TaskModal({
         type: taskType,
         assignee_id: assignee || "",
         due_date: dueDate || "",
-        sprint_id: sprintId || "",
+        story_points: storyPoints !== "" ? Number(storyPoints) : null,
       };
       const saved = task
         ? await request<Task>(`/projects/${projectId}/tasks/${task.id}`, {
@@ -303,9 +271,9 @@ export function TaskModal({
 
   return (
     <>
-      <div className="drawer-backdrop" onClick={onClose} />
-      <div className="drawer">
-        <div className="drawer-header">
+      <div className={cx.drawerBackdrop} onClick={onClose} />
+      <div className={cx.drawer}>
+        <div className={cx.drawerHeader}>
           <h2>
             <TypeIcon
               type={task?.type ?? taskType}
@@ -314,12 +282,12 @@ export function TaskModal({
             />
             {task ? "Task detail" : "New task"}
           </h2>
-          <button className="button secondary" type="button" onClick={onClose}>
+          <button className={cx.btnSecondary} type="button" onClick={onClose}>
             Close
           </button>
         </div>
-        <div className="drawer-body">
-          {error && <p className="error">{error}</p>}
+        <div className={cx.drawerBody}>
+          {error && <p className={cx.errorBox}>{error}</p>}
 
           {/* ── Parent breadcrumb ─────────────────────────────────────── */}
           {task?.parent_id && parentTask && (
@@ -355,9 +323,10 @@ export function TaskModal({
           )}
 
           {/* ── Task form ─────────────────────────────────────────────── */}
-          <form className="stack" onSubmit={submit} style={{ gap: 14 }}>
+          <form className={cx.stack} onSubmit={submit} style={{ gap: 14 }}>
             <Field label="Title">
               <input
+                className={cx.fieldInput}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Task title"
@@ -365,15 +334,20 @@ export function TaskModal({
             </Field>
             <Field label="Description">
               <textarea
+                className={cx.fieldTextarea}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Add a description..."
                 style={{ minHeight: 72 }}
               />
             </Field>
-            <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div
+              className={cx.stack}
+              style={{ gridTemplateColumns: "1fr 1fr", display: "grid" }}
+            >
               <Field label="Type">
                 <select
+                  className={cx.fieldSelect}
                   value={taskType}
                   onChange={(e) => setTaskType(e.target.value as Task["type"])}
                 >
@@ -385,6 +359,7 @@ export function TaskModal({
               </Field>
               <Field label="Status">
                 <select
+                  className={cx.fieldSelect}
                   value={status}
                   onChange={(e) => setStatus(e.target.value as Task["status"])}
                 >
@@ -395,6 +370,7 @@ export function TaskModal({
               </Field>
               <Field label="Priority">
                 <select
+                  className={cx.fieldSelect}
                   value={priority}
                   onChange={(e) =>
                     setPriority(e.target.value as Task["priority"])
@@ -405,8 +381,21 @@ export function TaskModal({
                   <option value="high">High</option>
                 </select>
               </Field>
+              <Field label="Story points">
+                <input
+                  className={cx.fieldInput}
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={storyPoints}
+                  onChange={(e) => setStoryPoints(e.target.value)}
+                  placeholder="—"
+                />
+              </Field>
               <Field label="Assignee">
                 <select
+                  className={cx.fieldSelect}
                   value={assignee}
                   onChange={(e) => setAssignee(e.target.value)}
                 >
@@ -418,29 +407,11 @@ export function TaskModal({
                   ))}
                 </select>
               </Field>
-              <Field label="Sprint">
-                <select
-                  value={sprintId}
-                  onChange={(e) => setSprintId(e.target.value)}
-                >
-                  <option value="">Backlog (no sprint)</option>
-                  {sprints.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                      {s.status === "active"
-                        ? " ▶ Active"
-                        : s.status === "completed"
-                          ? " ✓"
-                          : ""}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Due date *">
+              <Field label="Due date">
                 <input
+                  className={cx.fieldInput}
                   type="date"
                   value={dueDate}
-                  required
                   min={new Date().toISOString().split("T")[0]}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -458,17 +429,15 @@ export function TaskModal({
                 />
               </Field>
             </div>
-            {canEdit && (
-              <button className="button" disabled={saving}>
-                {saving ? "Saving..." : task ? "Save task" : "Create task"}
-              </button>
-            )}
+            <button className={cx.btn} disabled={saving}>
+              {saving ? "Saving..." : "Save task"}
+            </button>
           </form>
 
           {/* ── Subtasks (only for non-subtask tasks) ─────────────────── */}
           {task && !task.parent_id && (
             <>
-              <div className="drawer-divider" />
+              <div className={cx.drawerDivider} />
               <div>
                 <div
                   style={{
@@ -478,13 +447,13 @@ export function TaskModal({
                     marginBottom: 8,
                   }}
                 >
-                  <p className="drawer-section-title" style={{ margin: 0 }}>
+                  <p className={cx.drawerSectionTitle} style={{ margin: 0 }}>
                     Subtasks ({subtasks.length})
                   </p>
                   {!showSubtaskForm && (
                     <button
                       type="button"
-                      className="button secondary"
+                      className={cx.btnSecondary}
                       style={{ fontSize: "0.8rem", padding: "3px 10px" }}
                       onClick={() => setShowSubtaskForm(true)}
                     >
@@ -495,19 +464,20 @@ export function TaskModal({
 
                 {showSubtaskForm && (
                   <form
-                    className="comment-form"
+                    className={cx.commentForm}
                     style={{ marginBottom: 10 }}
                     onSubmit={submitSubtask}
                   >
                     <input
+                      className={cx.fieldInput}
                       value={subtaskTitle}
                       onChange={(e) => setSubtaskTitle(e.target.value)}
                       placeholder="Subtask title..."
                       autoFocus
                     />
-                    <div className="row">
+                    <div className={cx.row}>
                       <button
-                        className="button"
+                        className={cx.btn}
                         style={{ fontSize: "0.82rem", padding: "4px 12px" }}
                         disabled={savingSubtask || !subtaskTitle.trim()}
                       >
@@ -515,7 +485,7 @@ export function TaskModal({
                       </button>
                       <button
                         type="button"
-                        className="button secondary"
+                        className={cx.btnSecondary}
                         style={{ fontSize: "0.82rem", padding: "4px 12px" }}
                         onClick={() => {
                           setShowSubtaskForm(false);
@@ -530,14 +500,14 @@ export function TaskModal({
 
                 {loadingSubtasks ? (
                   <div
-                    className="empty"
+                    className={cx.empty}
                     style={{ padding: "8px 0", fontSize: "0.85rem" }}
                   >
                     Loading subtasks...
                   </div>
                 ) : subtasks.length === 0 ? (
                   <div
-                    className="empty"
+                    className={cx.empty}
                     style={{ padding: "8px 0", fontSize: "0.85rem" }}
                   >
                     No subtasks yet.
@@ -574,7 +544,7 @@ export function TaskModal({
                           {st.title}
                         </span>
                         <span
-                          className="pill"
+                          className={cx.pill}
                           style={{ fontSize: "0.75rem", padding: "1px 6px" }}
                         >
                           {labelStatus(st.status)}
@@ -590,59 +560,60 @@ export function TaskModal({
           {/* ── Comments (only when editing an existing task) ────────── */}
           {task && (
             <>
-              <div className="drawer-divider" />
+              <div className={cx.drawerDivider} />
               <div>
-                <p className="drawer-section-title">
+                <p className={cx.drawerSectionTitle}>
                   Comments ({comments.length})
                 </p>
 
                 {loadingComments ? (
                   <div
-                    className="empty"
+                    className={cx.empty}
                     style={{ padding: "12px 0", fontSize: "0.85rem" }}
                   >
                     Loading comments...
                   </div>
                 ) : (
-                  <div className="comment-list">
+                  <div className={cx.commentList}>
                     {comments.length === 0 && (
                       <div
-                        className="empty"
+                        className={cx.empty}
                         style={{ padding: "8px 0", fontSize: "0.85rem" }}
                       >
                         No comments yet. Be the first!
                       </div>
                     )}
                     {comments.map((c) => (
-                      <div className="comment-item" key={c.id}>
-                        <div className="comment-avatar">
+                      <div className={cx.commentItem} key={c.id}>
+                        <div className={cx.commentAvatar}>
                           {initials(c.author_name)}
                         </div>
-                        <div className="comment-bubble">
-                          <div className="comment-meta">
-                            <span className="comment-author">
+                        <div className={cx.commentBubble}>
+                          <div className={cx.commentMeta}>
+                            <span className={cx.commentAuthor}>
                               {c.author_name}
                             </span>
-                            <span className="comment-time">
+                            <span className={cx.commentTime}>
                               {timeAgo(c.created_at)}
                             </span>
                           </div>
                           {editingCommentId === c.id ? (
                             <div
-                              className="comment-form"
+                              className={cx.commentForm}
                               style={{ marginTop: 4 }}
                             >
                               <textarea
+                                className={cx.fieldTextarea}
                                 value={editingCommentBody}
                                 onChange={(e) =>
                                   setEditingCommentBody(e.target.value)
                                 }
                                 rows={2}
                               />
-                              <div className="row">
+                              <div className={cx.row}>
                                 <button
                                   type="button"
-                                  className="button"
+                                  className={cx.btn}
                                   style={{
                                     fontSize: "0.82rem",
                                     padding: "4px 12px",
@@ -653,7 +624,7 @@ export function TaskModal({
                                 </button>
                                 <button
                                   type="button"
-                                  className="button secondary"
+                                  className={cx.btnSecondary}
                                   style={{
                                     fontSize: "0.82rem",
                                     padding: "4px 12px",
@@ -666,12 +637,12 @@ export function TaskModal({
                             </div>
                           ) : (
                             <>
-                              <p className="comment-body">{c.body}</p>
+                              <p className={cx.commentBody}>{c.body}</p>
                               {c.author_id === currentUser?.id && (
-                                <div className="comment-actions">
+                                <div className={cx.commentActions}>
                                   <button
                                     type="button"
-                                    className="comment-action-btn"
+                                    className={cx.commentActionBtn}
                                     onClick={() => {
                                       setEditingCommentId(c.id);
                                       setEditingCommentBody(c.body);
@@ -681,7 +652,7 @@ export function TaskModal({
                                   </button>
                                   <button
                                     type="button"
-                                    className="comment-action-btn danger"
+                                    className={cx.commentActionBtnDanger}
                                     onClick={() => deleteComment(c.id)}
                                   >
                                     Delete
@@ -699,35 +670,25 @@ export function TaskModal({
 
                 {/* Add comment form */}
                 <form
-                  className="comment-form"
+                  className={cx.commentForm}
                   style={{ marginTop: 12 }}
                   onSubmit={submitComment}
                 >
                   <textarea
+                    className={cx.fieldTextarea}
                     value={commentBody}
                     onChange={(e) => setCommentBody(e.target.value)}
                     placeholder="Write a comment..."
                     rows={2}
                   />
                   <button
-                    className="button"
+                    className={cx.btn}
                     style={{ alignSelf: "flex-end", fontSize: "0.85rem" }}
                     disabled={submittingComment || !commentBody.trim()}
                   >
                     {submittingComment ? "Posting..." : "Post comment"}
                   </button>
                 </form>
-              </div>
-            </>
-          )}
-
-          {/* ── Task Activity ──────────────────────────────────────────── */}
-          {task && (
-            <>
-              <div className="drawer-divider" />
-              <div>
-                <p className="drawer-section-title">Activity</p>
-                <ActivityFeed events={taskActivity} loading={loadingActivity} />
               </div>
             </>
           )}

@@ -1,5 +1,6 @@
 import React from "react";
 import type { ProjectMember } from "../types";
+import * as cx from "../styles/classes";
 
 const ROLE_COLORS: Record<ProjectMember["role"], string> = {
   owner: "var(--role-owner, #b45309)",
@@ -38,34 +39,34 @@ export function MemberList({
   onRemove,
 }: MemberListProps) {
   if (members.length === 0) {
-    return <div className="empty">No members yet.</div>;
+    return <div className={cx.empty}>No members yet.</div>;
   }
 
   return (
-    <ul className="member-list">
+    <ul className={cx.memberList}>
       {members.map((m) => (
-        <li key={m.user_id} className="member-row">
-          <div className="member-avatar" title={m.user_name}>
+        <li key={m.user_id} className={cx.memberRow}>
+          <div className={cx.memberAvatar} title={m.user_name}>
             {avatarInitials(m.user_name)}
           </div>
-          <div className="member-info">
-            <span className="member-name">
+          <div className={cx.memberInfo}>
+            <span className={cx.memberName}>
               {m.user_name}
               {m.user_id === currentUserId && (
                 <span
-                  className="muted"
+                  className="text-text-muted"
                   style={{ fontWeight: 400, marginLeft: 6, fontSize: "0.8rem" }}
                 >
                   (you)
                 </span>
               )}
             </span>
-            <span className="muted" style={{ fontSize: "0.82rem" }}>
+            <span className="text-text-muted" style={{ fontSize: "0.82rem" }}>
               {m.user_email}
             </span>
           </div>
           <span
-            className="pill member-role-badge"
+            className={cx.pill}
             style={{
               color: ROLE_COLORS[m.role],
               background: ROLE_BG[m.role],
@@ -77,8 +78,9 @@ export function MemberList({
             {m.role}
           </span>
           {isOwner && m.role !== "owner" && (
-            <div className="member-actions row">
+            <div className={cx.row}>
               <select
+                className={cx.fieldSelect}
                 value={m.role}
                 onChange={(e) =>
                   onChangeRole(
@@ -94,7 +96,7 @@ export function MemberList({
                 <option value="viewer">viewer</option>
               </select>
               <button
-                className="button danger"
+                className={cx.btnDanger}
                 style={{ fontSize: "0.78rem", padding: "4px 10px" }}
                 onClick={() => onRemove(m.user_id)}
               >

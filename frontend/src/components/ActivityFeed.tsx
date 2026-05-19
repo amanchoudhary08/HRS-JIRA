@@ -1,6 +1,7 @@
 import React from "react";
 import type { ActivityEvent } from "../types";
 import { labelStatus } from "../utils/labelStatus";
+import * as cx from "../styles/classes";
 
 // ─── Human-readable messages per event type ──────────────────────────────────
 
@@ -187,45 +188,26 @@ interface ActivityFeedProps {
 export function ActivityFeed({ events, loading }: ActivityFeedProps) {
   if (loading) {
     return (
-      <div className="empty" style={{ fontSize: "0.85rem" }}>
-        Loading activity...
-      </div>
+      <div className={`${cx.empty} text-[0.85rem]`}>Loading activity...</div>
     );
   }
   if (events.length === 0) {
-    return (
-      <div className="empty" style={{ fontSize: "0.85rem" }}>
-        No activity yet.
-      </div>
-    );
+    return <div className={`${cx.empty} text-[0.85rem]`}>No activity yet.</div>;
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <div className="flex flex-col gap-0.5">
       {events.map((event) => (
         <div
           key={event.id}
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 10,
-            padding: "8px 0",
-            borderBottom: "1px solid var(--border)",
-          }}
+          className="flex items-start gap-2.5 py-2 border-b border-border"
         >
           <EventIcon type={event.type} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.85rem",
-                color: "var(--text)",
-                lineHeight: 1.4,
-              }}
-            >
+          <div className="flex-1 min-w-0">
+            <p className="m-0 text-[0.85rem] text-text leading-[1.4]">
               {formatMessage(event)}
             </p>
-            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            <span className="text-[0.75rem] text-text-muted">
               {timeAgo(event.created_at)}
             </span>
           </div>

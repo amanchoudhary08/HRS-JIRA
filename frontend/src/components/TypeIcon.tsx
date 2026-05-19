@@ -1,5 +1,6 @@
 import React from "react";
 import type { Task } from "../types";
+import * as cx from "../styles/classes";
 
 type TaskType = Task["type"];
 
@@ -159,15 +160,7 @@ export function TypeIcon({
   }
 
   return (
-    <span
-      data-tooltip={label}
-      className="type-icon"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        position: "relative",
-      }}
-    >
+    <span data-tooltip={label} className={cx.typeIcon}>
       {icon()}
     </span>
   );

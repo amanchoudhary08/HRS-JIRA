@@ -4,6 +4,7 @@ import com.taskflow.entity.Task;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public record TaskDto(
@@ -21,9 +22,16 @@ public record TaskDto(
         int position,
         LocalDate dueDate,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt
+        OffsetDateTime updatedAt,
+        List<LabelDto> labels,
+        Integer storyPoints
 ) {
     public static TaskDto from(Task t) {
+        List<LabelDto> labelDtos = t.getLabels() != null
+                ? t.getLabels().stream().map(LabelDto::from)
+                    .sorted(java.util.Comparator.comparing(LabelDto::name))
+                    .toList()
+                : List.of();
         return new TaskDto(
                 t.getId(),
                 t.getTitle(),
@@ -39,7 +47,9 @@ public record TaskDto(
                 t.getPosition(),
                 t.getDueDate(),
                 t.getCreatedAt(),
-                t.getUpdatedAt()
+                t.getUpdatedAt(),
+                labelDtos,
+                t.getStoryPoints()
         );
     }
 }

@@ -18,11 +18,15 @@ import {
 import { request } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { Layout } from "../components/Layout";
-import type { Project, ProjectStats } from "../types";
+import { ProjectSidebar } from "../components/ProjectSidebar";
+import * as cx from "../styles/classes";
+import type { Project, ProjectStats, Sprint, Task } from "../types";
 
 const STATUS_COLORS: Record<string, string> = {
   todo: "#94a3b8",
   in_progress: "#3b82f6",
+  blocked: "#ef4444",
+  in_review: "#a855f7",
   done: "#22c55e",
 };
 
@@ -46,7 +50,7 @@ function StatCard({
 }) {
   return (
     <div
-      className="card"
+      className={cx.card}
       style={{
         padding: "1.25rem 1.5rem",
         display: "flex",
@@ -79,16 +83,30 @@ export function DashboardPage() {
   const [stats, setStats] = useState<ProjectStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [sprintVelocity, setSprintVelocity] = useState<number | null>(null);
 
   useEffect(() => {
     if (!id || !token) return;
     Promise.all([
-      request<Project>(`/projects/${id}`, { token }),
+      request<Project & { tasks: Task[] }>(`/projects/${id}`, { token }),
       request<ProjectStats>(`/projects/${id}/stats`, { token }),
+      request<{ sprints: Sprint[] }>(`/projects/${id}/sprints`, { token }),
     ])
-      .then(([proj, s]) => {
+      .then(([proj, s, { sprints }]) => {
         setProject(proj as Project);
         setStats(s as ProjectStats);
+        const activeSprint = sprints.find((sp) => sp.status === "active");
+        if (activeSprint && proj.tasks) {
+          const velocity = proj.tasks
+            .filter(
+              (t) =>
+                t.sprint_id === activeSprint.id &&
+                t.status === "done" &&
+                t.story_points != null,
+            )
+            .reduce((sum, t) => sum + (t.story_points ?? 0), 0);
+          setSprintVelocity(velocity);
+        }
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
@@ -96,7 +114,7 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <Layout>
+      <Layout sidebar={<ProjectSidebar projectId={id!} />}>
         <p style={{ padding: "2rem", color: "var(--text-muted)" }}>
           Loading dashboard…
         </p>
@@ -106,8 +124,8 @@ export function DashboardPage() {
 
   if (error || !stats) {
     return (
-      <Layout>
-        <p className="error" style={{ margin: "2rem" }}>
+      <Layout sidebar={<ProjectSidebar projectId={id!} />}>
+        <p className={cx.errorBox} style={{ margin: "2rem" }}>
           {error || "Failed to load stats."}
         </p>
       </Layout>
@@ -122,6 +140,12 @@ export function DashboardPage() {
   const statusPieData = [
     { name: "To Do", value: open, key: "todo" },
     { name: "In Progress", value: inProgress, key: "in_progress" },
+    { name: "Blocked", value: stats.by_status.blocked ?? 0, key: "blocked" },
+    {
+      name: "In Review",
+      value: stats.by_status.in_review ?? 0,
+      key: "in_review",
+    },
     { name: "Done", value: done, key: "done" },
   ].filter((d) => d.value > 0);
 
@@ -154,25 +178,12 @@ export function DashboardPage() {
   });
 
   return (
-    <Layout>
+    <Layout
+      sidebar={<ProjectSidebar projectId={id!} />}
+      backTo={`/projects/${id}`}
+      backLabel="← Back to project"
+    >
       <div style={{ padding: "1.5rem 2rem", maxWidth: 1100, margin: "0 auto" }}>
-        {/* Breadcrumb */}
-        <div
-          style={{
-            marginBottom: "1rem",
-            fontSize: "0.85rem",
-            color: "var(--text-muted)",
-          }}
-        >
-          <Link
-            to={`/projects/${id}`}
-            style={{ color: "var(--brand)", textDecoration: "none" }}
-          >
-            ← {project?.name ?? "Project"}
-          </Link>
-          {" / Dashboard"}
-        </div>
-
         <h1
           style={{
             fontSize: "1.5rem",
@@ -197,6 +208,13 @@ export function DashboardPage() {
           <StatCard label="In Progress" value={inProgress} color="#3b82f6" />
           <StatCard label="Done" value={done} color="#22c55e" />
           <StatCard label="Overdue" value={stats.overdue} color="#ef4444" />
+          {sprintVelocity !== null && (
+            <StatCard
+              label="Sprint velocity (pts)"
+              value={sprintVelocity}
+              color="var(--brand)"
+            />
+          )}
         </div>
 
         {/* ── Row 1: Status pie + Type pie ─────────────── */}
@@ -209,7 +227,7 @@ export function DashboardPage() {
           }}
         >
           {/* Status Pie */}
-          <div className="card" style={{ padding: "1.25rem" }}>
+          <div className={cx.card} style={{ padding: "1.25rem" }}>
             <h2
               style={{
                 fontSize: "0.95rem",
@@ -252,7 +270,7 @@ export function DashboardPage() {
           </div>
 
           {/* Type Pie */}
-          <div className="card" style={{ padding: "1.25rem" }}>
+          <div className={cx.card} style={{ padding: "1.25rem" }}>
             <h2
               style={{
                 fontSize: "0.95rem",
@@ -305,7 +323,7 @@ export function DashboardPage() {
           }}
         >
           {/* By Assignee */}
-          <div className="card" style={{ padding: "1.25rem" }}>
+          <div className={cx.card} style={{ padding: "1.25rem" }}>
             <h2
               style={{
                 fontSize: "0.95rem",
@@ -346,7 +364,7 @@ export function DashboardPage() {
           </div>
 
           {/* By Sprint */}
-          <div className="card" style={{ padding: "1.25rem" }}>
+          <div className={cx.card} style={{ padding: "1.25rem" }}>
             <h2
               style={{
                 fontSize: "0.95rem",
@@ -384,7 +402,7 @@ export function DashboardPage() {
         </div>
 
         {/* ── Row 3: Tasks closed per day (burndown line) ── */}
-        <div className="card" style={{ padding: "1.25rem" }}>
+        <div className={cx.card} style={{ padding: "1.25rem" }}>
           <h2
             style={{
               fontSize: "0.95rem",

@@ -11,6 +11,8 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -67,6 +69,17 @@ public class Task {
     @Column(nullable = false)
     private int position = 0;
 
+    @Column(name = "story_points")
+    private Integer storyPoints;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "task_labels",
+        joinColumns = @JoinColumn(name = "task_id"),
+        inverseJoinColumns = @JoinColumn(name = "label_id")
+    )
+    private Set<Label> labels = new HashSet<>();
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
@@ -75,6 +88,6 @@ public class Task {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
-    public enum TaskStatus { todo, in_progress, done }
+    public enum TaskStatus { todo, in_progress, blocked, in_review, done }
     public enum TaskPriority { low, medium, high }
 }

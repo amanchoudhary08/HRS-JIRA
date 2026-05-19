@@ -18,6 +18,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -103,6 +104,7 @@ public class ProjectController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ProjectDto.from(p));
     }
 
+    @Transactional(readOnly = true)
     @GetMapping("/{id}")
     public ResponseEntity<?> getProject(
             @AuthenticationPrincipal User user,
@@ -183,6 +185,8 @@ public class ProjectController {
         Map<String, Integer> byStatus = new LinkedHashMap<>();
         byStatus.put("todo", 0);
         byStatus.put("in_progress", 0);
+        byStatus.put("blocked", 0);
+        byStatus.put("in_review", 0);
         byStatus.put("done", 0);
         for (Object[] row : taskRepo.countByStatusForProject(id)) {
             byStatus.put(row[0].toString(), ((Number) row[1]).intValue());
