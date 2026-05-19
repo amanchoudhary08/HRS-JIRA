@@ -121,7 +121,8 @@ export const searchDropdown =
 
 export const searchEmpty = "popup-muted px-3.5 py-3.5 text-[0.85rem]";
 
-export const searchGroup = "py-1 [&+&]:border-t [&+&]:border-[rgba(255,255,255,0.08)]";
+export const searchGroup =
+  "py-1 [&+&]:border-t [&+&]:border-[rgba(255,255,255,0.08)]";
 
 export const searchGroupHeader =
   "popup-muted px-3.5 pt-1.5 pb-1 text-[0.72rem] font-semibold uppercase tracking-[0.06em]";
@@ -318,3 +319,7 @@ export const typeIcon =
 // ── Project link ──────────────────────────────────────────────────────────────
 
 export const projectLink = "text-inherit no-underline block min-h-[148px]";
+
+// ── Mention highlight ────────────────────────────────────────────────────────
+
+export const mention = "font-semibold text-[var(--color-brand)]";

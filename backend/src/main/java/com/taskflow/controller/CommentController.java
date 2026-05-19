@@ -8,6 +8,7 @@ import com.taskflow.repository.CommentRepository;
 import com.taskflow.repository.ProjectMemberRepository;
 import com.taskflow.repository.ProjectRepository;
 import com.taskflow.repository.TaskRepository;
+import com.taskflow.repository.UserRepository;
 import com.taskflow.service.ActivityService;
 import com.taskflow.service.NotificationService;
 import com.taskflow.sse.EventBroker;
@@ -20,6 +21,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/projects/{projectId}/tasks/{taskId}/comments")
@@ -29,6 +32,7 @@ public class CommentController {
     private final TaskRepository taskRepo;
     private final CommentRepository commentRepo;
     private final ProjectMemberRepository memberRepo;
+    private final UserRepository userRepo;
     private final EventBroker broker;
     private final ActivityService activityService;
     private final NotificationService notificationService;
@@ -37,6 +41,7 @@ public class CommentController {
                              TaskRepository taskRepo,
                              CommentRepository commentRepo,
                              ProjectMemberRepository memberRepo,
+                             UserRepository userRepo,
                              EventBroker broker,
                              ActivityService activityService,
                              NotificationService notificationService) {
@@ -44,6 +49,7 @@ public class CommentController {
         this.taskRepo = taskRepo;
         this.commentRepo = commentRepo;
         this.memberRepo = memberRepo;
+        this.userRepo = userRepo;
         this.broker = broker;
         this.activityService = activityService;
         this.notificationService = notificationService;
@@ -114,6 +120,28 @@ public class CommentController {
                             "projectId", projectId.toString(),
                             "commentBy", user.getName()));
         }
+
+        // Parse @mentions and notify each resolved user
+        Pattern mentionPattern = Pattern.compile("@(\\w+)");
+        Matcher matcher = mentionPattern.matcher(comment.getBody());
+        String commentPreview = comment.getBody().length() > 100
+                ? comment.getBody().substring(0, 100) : comment.getBody();
+        while (matcher.find()) {
+            String mentionedName = matcher.group(1);
+            List<User> mentioned = userRepo.findByNameContainingIgnoreCase(mentionedName);
+            for (User mentionedUser : mentioned) {
+                if (!mentionedUser.getId().equals(user.getId())) {
+                    notificationService.notify(mentionedUser.getId(), "mentioned_in_comment",
+                            NotificationService.payload(
+                                    "taskId", task.getId().toString(),
+                                    "taskTitle", task.getTitle(),
+                                    "projectId", projectId.toString(),
+                                    "mentionedBy", user.getName(),
+                                    "commentBody", commentPreview));
+                }
+            }
+        }
+
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 

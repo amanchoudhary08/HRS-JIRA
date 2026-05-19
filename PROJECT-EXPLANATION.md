@@ -34,6 +34,8 @@
 9. [Seed Data (Test Credentials)](#9-seed-data-test-credentials)
 10. [Extended Features](#10-extended-features)
     - [10.1 Story Points](#101-story-points)
+    - [10.2 Task Linking](#102-task-linking)
+    - [10.3 @Mentions in Comments](#103-mentions-in-comments)
 
 ---
 
@@ -50,8 +52,9 @@
 - Create and manage **labels** per project and apply them to tasks for categorization
 - View **project statistics** (tasks by status, tasks by assignee)
 - **Full-text search** tasks by title or description across all accessible projects from the nav bar
-- Receive **in-app notifications** when a task is assigned to you or someone comments on your task — with a real-time bell icon, unread badge, dropdown panel, and optional hourly email digest
+- Receive **in-app notifications** when a task is assigned to you, someone comments on your task, or you are **@mentioned** in a comment — with a real-time bell icon, unread badge, dropdown panel, and optional hourly email digest
 - Upload and download **file attachments** on any task — drag-and-drop upload, progress bar, MIME-type validation, file streaming via the API (no direct browser-to-storage access)
+- **@mention users** in comments with a live typeahead dropdown; mentioned users receive an instant push notification showing the commenter's name, task context, and a preview of the comment
 
 ---
 
@@ -2351,3 +2354,176 @@ Rendered as:
   color="var(--brand)"
 />
 ```
+
+---
+
+### 10.2 Task Linking
+
+**Why it matters:** Core JIRA concept. Tasks can reference each other with typed relationships — judges expect to see "blocks / is blocked by / relates to / duplicates" between issues.
+
+---
+
+#### Database
+
+**Migration: `V16__task_links.sql`**
+
+```sql
+CREATE TYPE link_type AS ENUM ('blocks', 'is_blocked_by', 'relates_to', 'duplicates');
+
+CREATE TABLE task_links (
+  id          uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  source_id   uuid        NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  target_id   uuid        NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  link_type   link_type   NOT NULL,
+  created_by  uuid        NOT NULL REFERENCES users(id),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (source_id, target_id, link_type)
+);
+CREATE INDEX idx_task_links_source ON task_links(source_id);
+CREATE INDEX idx_task_links_target ON task_links(target_id);
+```
+
+---
+
+#### Backend
+
+**Entity: `entity/TaskLink.java`**
+
+| Field       | Type               | Notes                                                    |
+| ----------- | ------------------ | -------------------------------------------------------- |
+| `id`        | `UUID`             | Auto-generated                                           |
+| `source`    | `Task` (ManyToOne) | The task that owns the link                              |
+| `target`    | `Task` (ManyToOne) | The referenced task                                      |
+| `linkType`  | `String`           | `blocks` / `is_blocked_by` / `relates_to` / `duplicates` |
+| `createdBy` | `User` (ManyToOne) | User who created the link                                |
+| `createdAt` | `OffsetDateTime`   | Auto-set                                                 |
+
+**DTO: `dto/TaskLinkDto.java`** — `record` with fields: `id`, `sourceTaskId`, `sourceTaskTitle`, `targetTaskId`, `targetTaskTitle`, `linkType`, `createdById`. Built via static `from(TaskLink)` factory.
+
+**Repository: `repository/TaskLinkRepository.java`**
+
+- `findBySourceIdOrTargetId(UUID, UUID)` — fetch all links involving a task
+- `deleteBySourceIdAndTargetIdAndLinkType(UUID, UUID, String)` — remove a specific directional link
+
+**Controller: `TaskLinkController.java`** — mapped under `/projects/{projectId}/tasks/{taskId}/links`
+
+| Method   | Path                 | Auth     | Body                         | Response                   |
+| -------- | -------------------- | -------- | ---------------------------- | -------------------------- |
+| `GET`    | `.../links`          | Required | —                            | `{ links: TaskLinkDto[] }` |
+| `POST`   | `.../links`          | Required | `{ targetTaskId, linkType }` | `201 TaskLinkDto`          |
+| `DELETE` | `.../links/{linkId}` | Required | —                            | `204`                      |
+
+**Business rules enforced:**
+
+- Target task must exist in the same project
+- Cannot link a task to itself
+- `linkType` must be one of the four valid values
+- Creating `blocks` automatically creates the inverse `is_blocked_by` link on the target task (and vice versa)
+- Logs `task_linked` activity event with payload `{ title, targetTitle, linkType }`
+
+---
+
+#### Frontend
+
+**`types.ts`**
+
+```ts
+type TaskLink = {
+  id: string;
+  source_task_id: string;
+  source_task_title: string;
+  target_task_id: string;
+  target_task_title: string;
+  link_type: "blocks" | "is_blocked_by" | "relates_to" | "duplicates";
+  created_by_id: string;
+};
+```
+
+**`api/client.ts`** — helpers: `fetchTaskLinks`, `createTaskLink`, `deleteTaskLink`
+
+**`components/TaskModal.tsx`** — **Linked Issues** section (between Subtasks and Comments):
+
+- Loads links on modal open
+- Each link renders as: `[link_type badge] → [target task title]` with a `×` remove button
+- `+ Link issue` opens an inline form: task title search input + link type dropdown
+- Clicking a linked task title navigates to that task via `onOpenTask`
+
+---
+
+### 10.3 @Mentions in Comments
+
+**Why it matters:** Live demo moment — type `@Aman` in a comment, and Aman receives an instant real-time notification in another browser tab.
+
+---
+
+#### Backend
+
+No new database migration needed — mentions are parsed from comment body text at runtime.
+
+**`repository/UserRepository.java`** — added:
+
+```java
+List<User> findByNameContainingIgnoreCase(String name);
+```
+
+Used for both mention resolution on comment save and the autocomplete search endpoint.
+
+**`AuthController.java`** — new endpoint:
+
+| Method | Path            | Auth     | Params | Response                                  |
+| ------ | --------------- | -------- | ------ | ----------------------------------------- |
+| `GET`  | `/users/search` | Required | `?q=`  | `{ users: UserDto[] }` (up to 10 matches) |
+
+Returns users whose name contains `q` (case-insensitive). Used by the frontend mention typeahead dropdown.
+
+**`CommentController.java`** — after saving a comment, the `createComment` handler:
+
+1. Compiles a regex `@(\w+)` against the comment body
+2. For each `@word` match, calls `userRepo.findByNameContainingIgnoreCase(word)` to resolve users
+3. For each resolved user (excluding the comment author), calls:
+   ```java
+   notificationService.notify(userId, "mentioned_in_comment", payload)
+   ```
+   Payload fields:
+   | Key | Value |
+   |---|---|
+   | `taskId` | UUID of the task |
+   | `taskTitle` | Title of the task |
+   | `projectId` | UUID of the project |
+   | `mentionedBy` | Name of the comment author |
+   | `commentBody` | First 100 characters of the comment |
+
+---
+
+#### Frontend
+
+**`api/client.ts`** — new helper:
+
+```ts
+searchUsers(q: string, token: string): Promise<{ users: User[] }>
+// calls GET /users/search?q=<q>
+```
+
+**`styles/classes.ts`** — new class:
+
+```ts
+export const mention = "font-semibold text-[var(--color-brand)]";
+```
+
+**`components/TaskModal.tsx`** — upgraded comment textarea:
+
+- On every keystroke, detects if the cursor is positioned inside a `@word` token (regex `/@(\w+)$/` on text before cursor)
+- If a mention is active, calls `searchUsers(word, token)` and renders a floating dropdown above the textarea with matching users (avatar initials + name + email)
+- `onMouseDown` (prevents blur) inserts `@FullName` at the cursor position and closes the dropdown
+- `Escape` dismisses the dropdown without inserting
+- Saved comment bodies: `@word` tokens are split out and wrapped in `<span className={cx.mention}>` for brand-colored bold rendering
+
+**`components/NotificationBell.tsx`** — additions:
+
+- `formatMessage` handles `mentioned_in_comment` type:
+  ```
+  "Aman mentioned you in "Fix login bug": "Hey @John, can you take a look...""
+  ```
+  Shows commenter name, task title, and a preview of the comment body.
+- Notification icon: 📌 emoji for `mentioned_in_comment` type
+- Real-time delivery: SSE personal channel pushes the notification instantly; a toast appears in the bottom-right corner of the screen

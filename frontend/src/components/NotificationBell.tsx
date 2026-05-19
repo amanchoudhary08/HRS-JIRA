@@ -28,6 +28,10 @@ function formatMessage(n: Notification): string {
   if (n.type === "comment_added") {
     return `${p.commentBy ?? "Someone"} commented on "${p.taskTitle ?? "unknown"}"`;
   }
+  if (n.type === "mentioned_in_comment") {
+    const preview = p.commentBody ? `: "${p.commentBody}"` : "";
+    return `${p.mentionedBy ?? "Someone"} mentioned you in "${p.taskTitle ?? "unknown"}"${preview}`;
+  }
   return `New notification: ${n.type}`;
 }
 
@@ -283,7 +287,10 @@ export function NotificationBell({ token }: { token: string }) {
                 padding: "12px 16px",
               }}
             >
-              <span className="popup-text" style={{ fontWeight: 700, fontSize: "0.95rem" }}>
+              <span
+                className="popup-text"
+                style={{ fontWeight: 700, fontSize: "0.95rem" }}
+              >
                 Notifications
               </span>
               {unread > 0 && (
@@ -307,12 +314,26 @@ export function NotificationBell({ token }: { token: string }) {
             {/* Body */}
             <div style={{ maxHeight: 380, overflowY: "auto" }}>
               {loading && (
-                <div className="popup-muted" style={{ padding: "16px", fontSize: "0.85rem", textAlign: "center" }}>
+                <div
+                  className="popup-muted"
+                  style={{
+                    padding: "16px",
+                    fontSize: "0.85rem",
+                    textAlign: "center",
+                  }}
+                >
                   Loading…
                 </div>
               )}
               {!loading && notifications.length === 0 && (
-                <div className="popup-muted" style={{ padding: "24px 16px", fontSize: "0.85rem", textAlign: "center" }}>
+                <div
+                  className="popup-muted"
+                  style={{
+                    padding: "24px 16px",
+                    fontSize: "0.85rem",
+                    textAlign: "center",
+                  }}
+                >
                   No notifications yet.
                 </div>
               )}
@@ -328,7 +349,9 @@ export function NotificationBell({ token }: { token: string }) {
                       gap: 10,
                       width: "100%",
                       padding: "12px 16px",
-                      background: n.read ? "transparent" : "rgba(255,255,255,0.06)",
+                      background: n.read
+                        ? "transparent"
+                        : "rgba(255,255,255,0.06)",
                       border: "none",
                       cursor: "pointer",
                       textAlign: "left",
@@ -343,12 +366,20 @@ export function NotificationBell({ token }: { token: string }) {
                         marginTop: 1,
                       }}
                     >
-                      {n.type === "task_assigned" ? "📋" : "💬"}
+                      {n.type === "task_assigned"
+                        ? "📋"
+                        : n.type === "mentioned_in_comment"
+                          ? "📌"
+                          : "💬"}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         className="popup-text"
-                        style={{ fontSize: "0.85rem", fontWeight: n.read ? 400 : 600, lineHeight: 1.4 }}
+                        style={{
+                          fontSize: "0.85rem",
+                          fontWeight: n.read ? 400 : 600,
+                          lineHeight: 1.4,
+                        }}
                       >
                         {formatMessage(n)}
                       </div>
@@ -361,7 +392,14 @@ export function NotificationBell({ token }: { token: string }) {
                     </div>
                     {!n.read && (
                       <span
-                        style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", flexShrink: 0, marginTop: 6 }}
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: "#4ade80",
+                          flexShrink: 0,
+                          marginTop: 6,
+                        }}
                       />
                     )}
                   </button>
