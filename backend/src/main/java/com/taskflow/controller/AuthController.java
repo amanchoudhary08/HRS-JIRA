@@ -83,4 +83,19 @@ public class AuthController {
                 .toList();
         return ResponseEntity.ok(Map.of("users", users));
     }
+
+    @GetMapping("/users/search")
+    public ResponseEntity<Map<String, Object>> searchUsers(
+            @AuthenticationPrincipal User currentUser,
+            @RequestParam(defaultValue = "") String q) {
+        if (q.isBlank()) {
+            return ResponseEntity.ok(Map.of("users", List.of()));
+        }
+        List<UserDto> users = userRepo.findByNameContainingIgnoreCase(q.trim())
+                .stream()
+                .limit(10)
+                .map(UserDto::from)
+                .toList();
+        return ResponseEntity.ok(Map.of("users", users));
+    }
 }

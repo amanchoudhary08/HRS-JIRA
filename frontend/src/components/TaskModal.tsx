@@ -1,9 +1,16 @@
-import React, { FormEvent, useEffect, useRef, useState } from "react";
+import React, {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import {
   request,
   fetchTaskLinks,
   createTaskLink,
   deleteTaskLink,
+  searchUsers,
 } from "../api/client";
 import { Field } from "./Field";
 import { TypeIcon } from "./TypeIcon";
@@ -97,6 +104,12 @@ export function TaskModal({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentBody, setEditingCommentBody] = useState("");
   const commentEndRef = useRef<HTMLDivElement>(null);
+
+  // @mention typeahead state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionResults, setMentionResults] = useState<User[]>([]);
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const editCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Task links state
   const [links, setLinks] = useState<TaskLink[]>([]);
@@ -232,6 +245,53 @@ export function TaskModal({
     } finally {
       setSaving(false);
     }
+  }
+
+  // ── @mention helpers ────────────────────────────────────────────────────────
+
+  const handleMentionInput = useCallback(
+    async (value: string, cursorPos: number) => {
+      const textBeforeCursor = value.substring(0, cursorPos);
+      const match = textBeforeCursor.match(/@(\w+)$/);
+      if (match) {
+        const query = match[1];
+        setMentionQuery(query);
+        try {
+          const data = await searchUsers(query, token ?? "");
+          setMentionResults(data.users);
+        } catch {
+          setMentionResults([]);
+        }
+      } else {
+        setMentionQuery(null);
+        setMentionResults([]);
+      }
+    },
+    [token],
+  );
+
+  function insertMention(
+    user: User,
+    currentValue: string,
+    cursorPos: number,
+  ): string {
+    const textBeforeCursor = currentValue.substring(0, cursorPos);
+    const textAfterCursor = currentValue.substring(cursorPos);
+    const newBefore = textBeforeCursor.replace(/@(\w+)$/, `@${user.name}`);
+    return newBefore + textAfterCursor;
+  }
+
+  function renderCommentBody(body: string): React.ReactNode {
+    const parts = body.split(/(@\w+)/g);
+    return parts.map((part, i) =>
+      /^@\w+$/.test(part) ? (
+        <span key={i} className={cx.mention}>
+          {part}
+        </span>
+      ) : (
+        part
+      ),
+    );
   }
 
   async function submitComment(e: FormEvent) {
@@ -990,7 +1050,9 @@ export function TaskModal({
                             </div>
                           ) : (
                             <>
-                              <p className={cx.commentBody}>{c.body}</p>
+                              <p className={cx.commentBody}>
+                                {renderCommentBody(c.body)}
+                              </p>
                               {c.author_id === currentUser?.id && (
                                 <div className={cx.commentActions}>
                                   <button
@@ -1027,13 +1089,112 @@ export function TaskModal({
                   style={{ marginTop: 12 }}
                   onSubmit={submitComment}
                 >
-                  <textarea
-                    className={cx.fieldTextarea}
-                    value={commentBody}
-                    onChange={(e) => setCommentBody(e.target.value)}
-                    placeholder="Write a comment..."
-                    rows={2}
-                  />
+                  <div style={{ position: "relative" }}>
+                    <textarea
+                      ref={commentTextareaRef}
+                      className={cx.fieldTextarea}
+                      value={commentBody}
+                      onChange={(e) => {
+                        setCommentBody(e.target.value);
+                        handleMentionInput(
+                          e.target.value,
+                          e.target.selectionStart ?? e.target.value.length,
+                        );
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          setMentionQuery(null);
+                          setMentionResults([]);
+                        }
+                      }}
+                      placeholder="Write a comment... use @name to mention"
+                      rows={2}
+                    />
+                    {mentionQuery !== null && mentionResults.length > 0 && (
+                      <div
+                        className="popup-panel"
+                        style={{
+                          position: "absolute",
+                          bottom: "calc(100% + 4px)",
+                          left: 0,
+                          right: 0,
+                          zIndex: 200,
+                          maxHeight: 200,
+                          overflowY: "auto",
+                          padding: "4px 0",
+                        }}
+                      >
+                        {mentionResults.map((u, i) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            className={
+                              i > 0 ? "popup-row popup-divider-t" : "popup-row"
+                            }
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              width: "100%",
+                              padding: "8px 14px",
+                              border: "none",
+                              cursor: "pointer",
+                              textAlign: "left",
+                              fontSize: "0.875rem",
+                            }}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              const textarea = commentTextareaRef.current;
+                              const cursor =
+                                textarea?.selectionStart ?? commentBody.length;
+                              const newBody = insertMention(
+                                u,
+                                commentBody,
+                                cursor,
+                              );
+                              setCommentBody(newBody);
+                              setMentionQuery(null);
+                              setMentionResults([]);
+                              setTimeout(() => textarea?.focus(), 0);
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: "50%",
+                                background: "var(--color-brand)",
+                                color: "#fff",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "0.75rem",
+                                fontWeight: 700,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {u.name
+                                .split(" ")
+                                .map((w: string) => w[0])
+                                .join("")
+                                .slice(0, 2)
+                                .toUpperCase()}
+                            </span>
+                            <span style={{ fontWeight: 500 }}>{u.name}</span>
+                            <span
+                              className="popup-muted"
+                              style={{
+                                fontSize: "0.78rem",
+                                marginLeft: "auto",
+                              }}
+                            >
+                              {u.email}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <button
                     className={cx.btn}
                     style={{ alignSelf: "flex-end", fontSize: "0.85rem" }}

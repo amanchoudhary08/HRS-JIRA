@@ -259,3 +259,17 @@ export function deleteTaskLink(
     { method: "DELETE", token },
   );
 }
+
+// ─── User search (for @mention typeahead) ─────────────────────────────────────
+
+import type { User } from "../types";
+
+export function searchUsers(
+  q: string,
+  token: string,
+): Promise<{ users: User[] }> {
+  return request<{ users: User[] }>(
+    `/users/search?q=${encodeURIComponent(q)}`,
+    { token },
+  );
+}
