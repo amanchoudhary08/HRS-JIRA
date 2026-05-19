@@ -72,7 +72,7 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
           background: "none",
           border: "none",
           cursor: "pointer",
-          color: "var(--color-text-muted)",
+          color: "var(--text-muted)",
           padding: 0,
           fontSize: "1rem",
           lineHeight: 1,
@@ -263,30 +263,27 @@ export function NotificationBell({ token }: { token: string }) {
         {/* Dropdown panel */}
         {open && (
           <div
+            className="popup-panel"
             style={{
               position: "absolute",
               top: "calc(100% + 8px)",
               right: 0,
               width: 340,
-              background: "var(--color-bg-card)",
-              border: "1px solid var(--color-border)",
-              borderRadius: 10,
-              boxShadow: "0 4px 24px rgba(0,0,0,0.16)",
               zIndex: 300,
               overflow: "hidden",
             }}
           >
             {/* Header */}
             <div
+              className="popup-divider-header"
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 padding: "12px 16px",
-                borderBottom: "1px solid var(--color-border)",
               }}
             >
-              <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>
+              <span className="popup-text" style={{ fontWeight: 700, fontSize: "0.95rem" }}>
                 Notifications
               </span>
               {unread > 0 && (
@@ -310,26 +307,12 @@ export function NotificationBell({ token }: { token: string }) {
             {/* Body */}
             <div style={{ maxHeight: 380, overflowY: "auto" }}>
               {loading && (
-                <div
-                  style={{
-                    padding: "16px",
-                    color: "var(--color-text-muted)",
-                    fontSize: "0.85rem",
-                    textAlign: "center",
-                  }}
-                >
+                <div className="popup-muted" style={{ padding: "16px", fontSize: "0.85rem", textAlign: "center" }}>
                   Loading…
                 </div>
               )}
               {!loading && notifications.length === 0 && (
-                <div
-                  style={{
-                    padding: "24px 16px",
-                    color: "var(--color-text-muted)",
-                    fontSize: "0.85rem",
-                    textAlign: "center",
-                  }}
-                >
+                <div className="popup-muted" style={{ padding: "24px 16px", fontSize: "0.85rem", textAlign: "center" }}>
                   No notifications yet.
                 </div>
               )}
@@ -338,15 +321,15 @@ export function NotificationBell({ token }: { token: string }) {
                   <button
                     key={n.id}
                     onClick={() => handleMarkRead(n)}
+                    className="popup-divider-b"
                     style={{
                       display: "flex",
                       alignItems: "flex-start",
                       gap: 10,
                       width: "100%",
                       padding: "12px 16px",
-                      background: n.read ? "transparent" : "var(--color-bg)",
+                      background: n.read ? "transparent" : "rgba(255,255,255,0.06)",
                       border: "none",
-                      borderBottom: "1px solid var(--color-border)",
                       cursor: "pointer",
                       textAlign: "left",
                       transition: "background 0.15s",
@@ -364,35 +347,21 @@ export function NotificationBell({ token }: { token: string }) {
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div
-                        style={{
-                          fontSize: "0.85rem",
-                          color: "var(--color-text)",
-                          fontWeight: n.read ? 400 : 600,
-                          lineHeight: 1.4,
-                        }}
+                        className="popup-text"
+                        style={{ fontSize: "0.85rem", fontWeight: n.read ? 400 : 600, lineHeight: 1.4 }}
                       >
                         {formatMessage(n)}
                       </div>
                       <div
-                        style={{
-                          fontSize: "0.75rem",
-                          color: "var(--color-text-muted)",
-                          marginTop: 3,
-                        }}
+                        className="popup-muted"
+                        style={{ fontSize: "0.75rem", marginTop: 3 }}
                       >
                         {timeAgo(n.created_at)}
                       </div>
                     </div>
                     {!n.read && (
                       <span
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          background: "var(--color-brand)",
-                          flexShrink: 0,
-                          marginTop: 6,
-                        }}
+                        style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", flexShrink: 0, marginTop: 6 }}
                       />
                     )}
                   </button>

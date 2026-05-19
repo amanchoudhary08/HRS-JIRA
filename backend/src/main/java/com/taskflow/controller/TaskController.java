@@ -116,7 +116,7 @@ public class TaskController {
         if (!projectRepo.existsAccessibleByUserAndId(projectId, user.getId())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "not found"));
         }
-        Map<String, String> errors = validateTaskInput(req.title(), req.status(), req.priority(), req.assigneeId(), req.dueDate(), true);
+        Map<String, String> errors = validateTaskInput(req.title(), req.status(), req.priority(), req.assigneeId(), req.dueDate(), true, true);
         if (!errors.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "validation failed", "fields", errors));
         }
@@ -179,7 +179,7 @@ public class TaskController {
         String assigneeId = req.assigneeId();
         String dueDate = req.dueDate();
 
-        Map<String, String> errors = validateTaskInput(title, status, priority, assigneeId, dueDate, true);
+        Map<String, String> errors = validateTaskInput(title, status, priority, assigneeId, dueDate, true, false);
         if (!errors.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "validation failed", "fields", errors));
         }
@@ -303,10 +303,14 @@ public class TaskController {
     }
 
     private Map<String, String> validateTaskInput(String title, String status, String priority,
-                                                   String assigneeId, String dueDate, boolean titleRequired) {
+                                                   String assigneeId, String dueDate, boolean titleRequired,
+                                                   boolean dueDateRequired) {
         Map<String, String> errors = new LinkedHashMap<>();
         if (titleRequired && (title == null || title.trim().isEmpty())) {
             errors.put("title", "is required");
+        }
+        if (dueDateRequired && (dueDate == null || dueDate.trim().isEmpty())) {
+            errors.put("due_date", "is required");
         }
         if (status != null && !status.isEmpty() && !isValidStatus(status)) {
             errors.put("status", "must be todo, in_progress, or done");

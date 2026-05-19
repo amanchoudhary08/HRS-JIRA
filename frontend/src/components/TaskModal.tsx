@@ -1,10 +1,15 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
-import { request } from "../api/client";
+import {
+  request,
+  fetchTaskLinks,
+  createTaskLink,
+  deleteTaskLink,
+} from "../api/client";
 import { Field } from "./Field";
 import { TypeIcon } from "./TypeIcon";
 import { labelStatus } from "../utils/labelStatus";
 import * as cx from "../styles/classes";
-import type { Comment, SSETaskEvent, Task, User } from "../types";
+import type { Comment, SSETaskEvent, Task, TaskLink, User } from "../types";
 
 function timeAgo(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -33,6 +38,9 @@ export function TaskModal({
   onClose,
   onSaved,
   onOpenTask,
+  sprints: _sprints,
+  allLabels: _allLabels,
+  canEdit: _canEdit,
 }: {
   projectId: string;
   token: string | null;
@@ -43,6 +51,9 @@ export function TaskModal({
   onClose: () => void;
   onSaved: (task: Task) => void;
   onOpenTask?: (task: Task) => void;
+  sprints?: unknown[];
+  allLabels?: unknown[];
+  canEdit?: boolean;
 }) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
@@ -59,6 +70,13 @@ export function TaskModal({
     task?.story_points != null ? String(task.story_points) : "",
   );
   const [error, setError] = useState("");
+
+  // Auto-dismiss error after 3 seconds
+  useEffect(() => {
+    if (!error) return;
+    const t = setTimeout(() => setError(""), 3000);
+    return () => clearTimeout(t);
+  }, [error]);
   const [saving, setSaving] = useState(false);
 
   // Subtask state
@@ -80,6 +98,15 @@ export function TaskModal({
   const [editingCommentBody, setEditingCommentBody] = useState("");
   const commentEndRef = useRef<HTMLDivElement>(null);
 
+  // Task links state
+  const [links, setLinks] = useState<TaskLink[]>([]);
+  const [loadingLinks, setLoadingLinks] = useState(false);
+  const [showLinkForm, setShowLinkForm] = useState(false);
+  const [linkTargetSearch, setLinkTargetSearch] = useState("");
+  const [linkSearchResults, setLinkSearchResults] = useState<Task[]>([]);
+  const [linkType, setLinkType] = useState<TaskLink["link_type"]>("relates_to");
+  const [savingLink, setSavingLink] = useState(false);
+
   // Sync all fields whenever the task prop changes
   useEffect(() => {
     setTitle(task?.title ?? "");
@@ -94,6 +121,10 @@ export function TaskModal({
     setSubtasks([]);
     setParentTask(null);
     setShowSubtaskForm(false);
+    setLinks([]);
+    setShowLinkForm(false);
+    setLinkTargetSearch("");
+    setLinkSearchResults([]);
   }, [task?.id]);
 
   // Load comments + subtasks + parent when a task is opened
@@ -129,6 +160,13 @@ export function TaskModal({
         .then((p) => setParentTask(p))
         .catch(() => setParentTask(null));
     }
+
+    // Load task links
+    setLoadingLinks(true);
+    fetchTaskLinks(projectId, task.id, token ?? "")
+      .then((data) => setLinks(data.links))
+      .catch(() => setLinks([]))
+      .finally(() => setLoadingLinks(false));
   }, [task?.id]);
 
   // Handle live SSE comment events
@@ -161,6 +199,7 @@ export function TaskModal({
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!title.trim()) return setError("Title is required.");
+    if (!task && !dueDate) return setError("Due date is required.");
     if (dueDate && dueDate < new Date().toISOString().split("T")[0]) {
       return setError("Due date cannot be in the past.");
     }
@@ -249,6 +288,56 @@ export function TaskModal({
     }
   }
 
+  async function searchLinkTarget(q: string) {
+    setLinkTargetSearch(q);
+    if (!q.trim()) {
+      setLinkSearchResults([]);
+      return;
+    }
+    try {
+      const data = await request<{ tasks: Task[] }>(
+        `/projects/${projectId}/tasks/search?q=${encodeURIComponent(q)}`,
+        { token },
+      );
+      // Exclude the current task from results
+      setLinkSearchResults(data.tasks.filter((t) => t.id !== task?.id));
+    } catch {
+      setLinkSearchResults([]);
+    }
+  }
+
+  async function submitLink(targetTask: Task) {
+    if (!task) return;
+    setSavingLink(true);
+    try {
+      const created = await createTaskLink(
+        projectId,
+        task.id,
+        { targetTaskId: targetTask.id, linkType },
+        token ?? "",
+      );
+      setLinks((prev) => [...prev, created]);
+      setShowLinkForm(false);
+      setLinkTargetSearch("");
+      setLinkSearchResults([]);
+      setLinkType("relates_to");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create link");
+    } finally {
+      setSavingLink(false);
+    }
+  }
+
+  async function removeLink(linkId: string) {
+    if (!task) return;
+    try {
+      await deleteTaskLink(projectId, task.id, linkId, token ?? "");
+      setLinks((prev) => prev.filter((l) => l.id !== linkId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove link");
+    }
+  }
+
   async function submitSubtask(e: FormEvent) {
     e.preventDefault();
     if (!subtaskTitle.trim() || !task) return;
@@ -287,7 +376,36 @@ export function TaskModal({
           </button>
         </div>
         <div className={cx.drawerBody}>
-          {error && <p className={cx.errorBox}>{error}</p>}
+          {error && (
+            <div
+              className={cx.errorBox}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => setError("")}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "inherit",
+                  fontSize: "1.1rem",
+                  lineHeight: 1,
+                  padding: "0 2px",
+                  flexShrink: 0,
+                }}
+                aria-label="Dismiss error"
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           {/* ── Parent breadcrumb ─────────────────────────────────────── */}
           {task?.parent_id && parentTask && (
@@ -365,6 +483,8 @@ export function TaskModal({
                 >
                   <option value="todo">Todo</option>
                   <option value="in_progress">In progress</option>
+                  <option value="blocked">Blocked</option>
+                  <option value="in_review">In review</option>
                   <option value="done">Done</option>
                 </select>
               </Field>
@@ -551,6 +671,239 @@ export function TaskModal({
                         </span>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── Linked Issues ─────────────────────────────────────── */}
+          {task && (
+            <>
+              <div className={cx.drawerDivider} />
+              <div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 8,
+                  }}
+                >
+                  <p className={cx.drawerSectionTitle} style={{ margin: 0 }}>
+                    Linked Issues ({links.length})
+                  </p>
+                  {!showLinkForm && (
+                    <button
+                      type="button"
+                      className={cx.btnSecondary}
+                      style={{ fontSize: "0.8rem", padding: "3px 10px" }}
+                      onClick={() => setShowLinkForm(true)}
+                    >
+                      + Link issue
+                    </button>
+                  )}
+                </div>
+
+                {showLinkForm && (
+                  <div style={{ marginBottom: 10, display: "grid", gap: 6 }}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <select
+                        className={cx.fieldSelect}
+                        style={{ flex: "0 0 160px", minHeight: 36 }}
+                        value={linkType}
+                        onChange={(e) =>
+                          setLinkType(e.target.value as TaskLink["link_type"])
+                        }
+                      >
+                        <option value="blocks">blocks</option>
+                        <option value="is_blocked_by">is blocked by</option>
+                        <option value="relates_to">relates to</option>
+                        <option value="duplicates">duplicates</option>
+                      </select>
+                      <div style={{ flex: 1, position: "relative" }}>
+                        <input
+                          className={cx.fieldInput}
+                          style={{ minHeight: 36 }}
+                          value={linkTargetSearch}
+                          onChange={(e) => searchLinkTarget(e.target.value)}
+                          placeholder="Search task by title..."
+                          autoFocus
+                        />
+                        {linkSearchResults.length > 0 && (
+                          <div
+                            className="popup-panel"
+                            style={{
+                              position: "absolute",
+                              top: "calc(100% + 6px)",
+                              left: 0,
+                              right: 0,
+                              zIndex: 200,
+                              maxHeight: 220,
+                              overflowY: "auto",
+                              padding: "4px 0",
+                            }}
+                          >
+                            {linkSearchResults.map((t, i) => (
+                              <button
+                                key={t.id}
+                                type="button"
+                                disabled={savingLink}
+                                className={
+                                  i > 0
+                                    ? "popup-row popup-divider-t"
+                                    : "popup-row"
+                                }
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  width: "100%",
+                                  padding: "8px 14px",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  textAlign: "left",
+                                  fontSize: "0.875rem",
+                                  transition: "background 0.1s",
+                                }}
+                                onClick={() => submitLink(t)}
+                              >
+                                <TypeIcon type={t.type} size={14} />
+                                <span
+                                  style={{
+                                    flex: 1,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    fontWeight: 500,
+                                  }}
+                                >
+                                  {t.title}
+                                </span>
+                                <span
+                                  className="popup-muted"
+                                  style={{ fontSize: "0.75rem", flexShrink: 0 }}
+                                >
+                                  {t.type}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className={cx.row}>
+                      <button
+                        type="button"
+                        className={cx.btnSecondary}
+                        style={{ fontSize: "0.82rem", padding: "4px 12px" }}
+                        onClick={() => {
+                          setShowLinkForm(false);
+                          setLinkTargetSearch("");
+                          setLinkSearchResults([]);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {loadingLinks ? (
+                  <div
+                    className={cx.empty}
+                    style={{ padding: "8px 0", fontSize: "0.85rem" }}
+                  >
+                    Loading links...
+                  </div>
+                ) : links.length === 0 ? (
+                  <div
+                    className={cx.empty}
+                    style={{ padding: "8px 0", fontSize: "0.85rem" }}
+                  >
+                    No linked issues yet.
+                  </div>
+                ) : (
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 4 }}
+                  >
+                    {links.map((l) => {
+                      const isSource = l.source_task_id === task.id;
+                      const linkedTitle = isSource
+                        ? l.target_task_title
+                        : l.source_task_title;
+                      const linkedId = isSource
+                        ? l.target_task_id
+                        : l.source_task_id;
+                      const linkedTask = {
+                        id: linkedId,
+                        title: linkedTitle,
+                      } as Task;
+                      return (
+                        <div
+                          key={l.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "6px 8px",
+                            borderRadius: 6,
+                            background: "var(--bg)",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "0.75rem",
+                              fontWeight: 700,
+                              padding: "2px 7px",
+                              borderRadius: 4,
+                              background: "var(--bg-card)",
+                              border: "1px solid var(--border)",
+                              color: "var(--text-muted)",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {l.link_type.replace(/_/g, " ")}
+                          </span>
+                          <button
+                            type="button"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: "var(--brand)",
+                              cursor: "pointer",
+                              padding: 0,
+                              fontWeight: 600,
+                              fontSize: "0.88rem",
+                              flex: 1,
+                              textAlign: "left",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                            onClick={() => onOpenTask?.(linkedTask)}
+                          >
+                            {linkedTitle}
+                          </button>
+                          <button
+                            type="button"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              color: "var(--text-muted)",
+                              fontSize: "1rem",
+                              lineHeight: 1,
+                              padding: "0 2px",
+                            }}
+                            title="Remove link"
+                            onClick={() => removeLink(l.id)}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

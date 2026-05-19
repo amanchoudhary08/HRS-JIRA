@@ -25,6 +25,27 @@
   --shadow-search: 0 8px 24px rgba(35, 51, 45, 0.08);
 }
 
+/* ── Dark mode tokens — applied when the in-app dark mode toggle is used ── */
+.dark {
+  --color-bg: #0f1412;
+  --color-bg-card: #1a2220;
+  --color-bg-nav: #141b19;
+  --color-border: #2a3530;
+  --color-border-input: #334039;
+  --color-text: #e8ede9;
+  --color-text-muted: #8a9e95;
+  --color-text-label: #c4d0c8;
+  --color-brand: #4ade80;
+  --color-pill-bg: #1e3329;
+  --color-pill-color: #6ee7a6;
+  --color-empty-border: #3a4e44;
+  --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-drawer: -4px 0 32px rgba(0, 0, 0, 0.5);
+  --shadow-search: 0 8px 24px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
 /* ── Base resets ── */
 @layer base {
   *,
@@ -62,4 +83,32 @@
   button {
     cursor: pointer;
   }
+  /* Force macOS/OS dark chrome on all native select elements */
+  select {
+    color-scheme: dark;
+  }
 }
+
+/* ── Shared dark popup panel — ONE source of truth for all dropdowns ── */
+.popup-panel {
+  background: #3a3a3c;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+/* Text colours inside popup */
+.popup-text  { color: #ffffff; }
+.popup-muted { color: rgba(255, 255, 255, 0.5); }
+/* Row buttons */
+.popup-row {
+  color: #ffffff;
+  background: transparent;
+}
+.popup-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+/* Dividers */
+.popup-divider-b { border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.popup-divider-t { border-top:    1px solid rgba(255, 255, 255, 0.08); }
+.popup-divider-header { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }

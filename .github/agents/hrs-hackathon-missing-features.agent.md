@@ -19,6 +19,7 @@ You are the **HRS Missing Features Agent** — a full-stack engineer adding the 
 Always read these files first to understand the current state:
 
 **Backend:**
+
 - `backend/src/main/java/com/taskflow/entity/` — existing JPA entities
 - `backend/src/main/java/com/taskflow/controller/TaskController.java` — task mutation patterns
 - `backend/src/main/java/com/taskflow/controller/CommentController.java` — comment patterns
@@ -28,6 +29,7 @@ Always read these files first to understand the current state:
 - `backend/src/main/resources/db/migration/` — all existing migrations
 
 **Frontend:**
+
 - `frontend/src/types.ts` — all shared TypeScript types
 - `frontend/src/api/client.ts` — API helper functions
 - `frontend/src/components/TaskModal.tsx` — the main task detail drawer
@@ -39,16 +41,19 @@ Always read these files first to understand the current state:
 ## Feature 1 — Story Points
 
 ### Why it matters for the demo
+
 Sprint planning has no capacity concept without it. Judges expect to see "points" next to tasks.
 
 ### Backend
 
 **Migration: `V15__story_points.sql`**
+
 ```sql
 ALTER TABLE tasks ADD COLUMN story_points integer;
 ```
 
 **Changes:**
+
 1. `entity/Task.java` — add `@Column(name = "story_points") private Integer storyPoints;`
 2. `dto/TaskDto.java` — add `Integer storyPoints` field; update `from(Task)` factory to map it
 3. `controller/TaskController.java` — accept `storyPoints` in both `CreateTaskRequest` and `UpdateTaskRequest` inner records; set it on the entity before save
@@ -66,11 +71,13 @@ ALTER TABLE tasks ADD COLUMN story_points integer;
 ## Feature 2 — Task Linking
 
 ### Why it matters for the demo
+
 Core JIRA concept. Judges will ask "can tasks reference each other?" — the answer must be yes.
 
 ### Backend
 
 **Migration: `V16__task_links.sql`**
+
 ```sql
 CREATE TYPE link_type AS ENUM ('blocks', 'is_blocked_by', 'relates_to', 'duplicates');
 
@@ -90,6 +97,7 @@ CREATE INDEX idx_task_links_target ON task_links(target_id);
 **New files to create:**
 
 `entity/TaskLink.java`
+
 ```java
 @Entity @Table(name = "task_links")
 // fields: id (UUID), source (ManyToOne Task), target (ManyToOne Task),
@@ -97,12 +105,14 @@ CREATE INDEX idx_task_links_target ON task_links(target_id);
 ```
 
 `repository/TaskLinkRepository.java`
+
 ```java
 // findBySourceIdOrTargetId(UUID sourceId, UUID targetId) — fetch all links for a task
 // deleteBySourceIdAndTargetIdAndLinkType(UUID, UUID, String)
 ```
 
 `dto/TaskLinkDto.java`
+
 ```java
 // record: id, sourceTaskId, sourceTaskTitle, targetTaskId, targetTaskTitle, linkType, createdById
 ```
@@ -110,13 +120,14 @@ CREATE INDEX idx_task_links_target ON task_links(target_id);
 **New controller: `TaskLinkController.java`**
 Mapped under `/projects/{projectId}/tasks/{taskId}/links`
 
-| Method | Path | Auth | Body | Response |
-|--------|------|------|------|----------|
-| `GET` | `/projects/{id}/tasks/{taskId}/links` | Required | — | `{ links: TaskLinkDto[] }` |
-| `POST` | `/projects/{id}/tasks/{taskId}/links` | Required | `{ targetTaskId, linkType }` | `201 TaskLinkDto` |
-| `DELETE` | `/projects/{id}/tasks/{taskId}/links/{linkId}` | Required | — | `204` |
+| Method   | Path                                           | Auth     | Body                         | Response                   |
+| -------- | ---------------------------------------------- | -------- | ---------------------------- | -------------------------- |
+| `GET`    | `/projects/{id}/tasks/{taskId}/links`          | Required | —                            | `{ links: TaskLinkDto[] }` |
+| `POST`   | `/projects/{id}/tasks/{taskId}/links`          | Required | `{ targetTaskId, linkType }` | `201 TaskLinkDto`          |
+| `DELETE` | `/projects/{id}/tasks/{taskId}/links/{linkId}` | Required | —                            | `204`                      |
 
 **Validation:**
+
 - `targetTaskId` must exist in the same project
 - Cannot link a task to itself
 - `linkType` must be one of: `blocks`, `is_blocked_by`, `relates_to`, `duplicates`
@@ -135,7 +146,7 @@ Mapped under `/projects/{projectId}/tasks/{taskId}/links`
      source_task_title: string;
      target_task_id: string;
      target_task_title: string;
-     link_type: 'blocks' | 'is_blocked_by' | 'relates_to' | 'duplicates';
+     link_type: "blocks" | "is_blocked_by" | "relates_to" | "duplicates";
      created_by_id: string;
    };
    ```
@@ -155,6 +166,7 @@ Mapped under `/projects/{projectId}/tasks/{taskId}/links`
 ## Feature 3 — @Mentions in Comments
 
 ### Why it matters for the demo
+
 Live demo moment — type `@aman`, they get notified instantly in the other tab.
 
 ### Backend
@@ -162,6 +174,7 @@ Live demo moment — type `@aman`, they get notified instantly in the other tab.
 **No new migration needed** — mentions are parsed from comment body text.
 
 **Changes to `CommentController.java`** — after saving a comment, parse the body for `@name` patterns:
+
 1. Extract all `@word` tokens from `comment.getBody()`
 2. For each token, call `userRepo.findByNameIgnoreCase(name)` to resolve users
 3. For each resolved user (excluding the comment author), call `notificationService.notify(userId, "mentioned_in_comment", payload)`
@@ -190,11 +203,13 @@ Live demo moment — type `@aman`, they get notified instantly in the other tab.
 ## Feature 4 — Watchers
 
 ### Why it matters for the demo
+
 Shows collaborative awareness — anyone can follow a task, not just the assignee.
 
 ### Backend
 
 **Migration: `V17__watchers.sql`**
+
 ```sql
 CREATE TABLE task_watchers (
   task_id    uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -207,6 +222,7 @@ CREATE INDEX idx_task_watchers_user_id ON task_watchers(user_id);
 ```
 
 **New `repository/TaskWatcherRepository.java`:**
+
 ```java
 // existsByTaskIdAndUserId(UUID taskId, UUID userId)
 // findUserIdsByTaskId(UUID taskId) — returns List<UUID>
@@ -217,18 +233,20 @@ CREATE INDEX idx_task_watchers_user_id ON task_watchers(user_id);
 **New controller: `TaskWatcherController.java`**
 Mapped under `/projects/{projectId}/tasks/{taskId}/watchers`
 
-| Method | Path | Auth | Response |
-|--------|------|------|----------|
-| `GET` | `.../watchers` | Required | `{ watchers: UserDto[], watching: boolean, count: number }` |
-| `POST` | `.../watchers` | Required | `201 { watching: true, count: N }` (current user watches) |
+| Method   | Path           | Auth     | Response                                                     |
+| -------- | -------------- | -------- | ------------------------------------------------------------ |
+| `GET`    | `.../watchers` | Required | `{ watchers: UserDto[], watching: boolean, count: number }`  |
+| `POST`   | `.../watchers` | Required | `201 { watching: true, count: N }` (current user watches)    |
 | `DELETE` | `.../watchers` | Required | `200 { watching: false, count: N }` (current user unwatches) |
 
 **`TaskController.java` + `CommentController.java`** — after every mutation (status change, assignee change, comment added), call a new `WatcherNotificationService.notifyWatchers(taskId, actorId, type, payload)` that:
+
 1. Fetches all watcher user IDs for the task via `taskWatcherRepo.findUserIdsByTaskId(taskId)`
 2. Excludes the actor (don't notify yourself)
 3. Calls `notificationService.notify(userId, "watcher_update", payload)` for each
 
 **Auto-watch rules:**
+
 - Task creator is auto-added as a watcher on `POST /tasks`
 - Assignee is auto-added as a watcher when assigned
 
@@ -250,6 +268,7 @@ Mapped under `/projects/{projectId}/tasks/{taskId}/watchers`
 ## Feature 5 — Due Date Reminder Notifications
 
 ### Why it matters for the demo
+
 Due dates exist on every task but are completely silent. This closes the loop — the system actually reacts to them.
 
 ### Backend
@@ -289,6 +308,7 @@ public void sendDueDateReminders() {
 ```
 
 **`TaskRepository.java`** — add two queries:
+
 ```java
 @Query("SELECT t FROM Task t WHERE t.dueDate = :date AND t.status != 'done' AND t.assignee IS NOT NULL")
 List<Task> findDueTodayNotDone(@Param("date") LocalDate date);
@@ -312,10 +332,12 @@ List<Task> findDueTomorrowNotDone(@Param("date") LocalDate date);
    - Due **tomorrow** → orange text + orange background pill
    - Overdue (past due) → red bold text with `⚠` prefix
    - Future → current muted style (no change)
-   
+
    Use this logic (compute client-side, no API call needed):
+
    ```ts
-   const today = new Date(); today.setHours(0,0,0,0);
+   const today = new Date();
+   today.setHours(0, 0, 0, 0);
    const due = new Date(task.due_date);
    const diffDays = Math.floor((due.getTime() - today.getTime()) / 86400000);
    // diffDays < 0 → overdue, diffDays === 0 → due today, diffDays === 1 → due tomorrow
@@ -338,6 +360,7 @@ Work through features in this order — each is independent but story points sho
 ## Coding Conventions (match existing code style)
 
 **Backend:**
+
 - All DTOs are Java `record` types with a static `from(Entity)` factory method
 - Controllers use constructor injection (`@RequiredArgsConstructor` from Lombok)
 - Repository queries use `@Query` JPQL (not native SQL) unless aggregation requires it
@@ -347,6 +370,7 @@ Work through features in this order — each is independent but story points sho
 - `open-in-view: false` is set — always eagerly load associations before returning DTOs
 
 **Frontend:**
+
 - All API helpers live in `frontend/src/api/client.ts` and use the `request<T>()` wrapper
 - All shared types live in `frontend/src/types.ts`
 - Component class strings live in `frontend/src/styles/classes.ts` — use existing variables, add new ones there
@@ -365,10 +389,10 @@ Work through features in this order — each is independent but story points sho
 
 After implementing, you should be able to demo:
 
-| Feature | Demo action |
-|---|---|
-| Story Points | Create sprint, assign points to tasks, show velocity stat card on dashboard |
-| Task Linking | Open a Bug, link it as "blocks" a Story — show the inverse link appears on the Story automatically |
-| @Mentions | In tab 1: type a comment with `@Aman` — in tab 2 (logged in as Aman): notification bell lights up in real time |
-| Watchers | User B watches a task they're not assigned to — User A updates the status — User B gets a notification |
-| Due Reminders | Show a task due today with the red due date pill on the card |
+| Feature       | Demo action                                                                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------------------- |
+| Story Points  | Create sprint, assign points to tasks, show velocity stat card on dashboard                                    |
+| Task Linking  | Open a Bug, link it as "blocks" a Story — show the inverse link appears on the Story automatically             |
+| @Mentions     | In tab 1: type a comment with `@Aman` — in tab 2 (logged in as Aman): notification bell lights up in real time |
+| Watchers      | User B watches a task they're not assigned to — User A updates the status — User B gets a notification         |
+| Due Reminders | Show a task due today with the red due date pill on the card                                                   |

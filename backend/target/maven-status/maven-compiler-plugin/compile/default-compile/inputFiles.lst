@@ -14,6 +14,7 @@
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/SprintController.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/SseController.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/TaskController.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/TaskLinkController.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/dto/ActivityEventDto.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/dto/AttachmentDto.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/dto/CommentDto.java
@@ -24,6 +25,7 @@
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/dto/SearchResultDto.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/dto/SprintDto.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/dto/TaskDto.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/dto/TaskLinkDto.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/dto/UserDto.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/ActivityEvent.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/Attachment.java
@@ -34,6 +36,7 @@
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/ProjectMember.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/Sprint.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/Task.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/TaskLink.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/User.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/ActivityEventRepository.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/AttachmentRepository.java
@@ -43,6 +46,7 @@
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/ProjectMemberRepository.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/ProjectRepository.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/SprintRepository.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/TaskLinkRepository.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/TaskRepository.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/UserRepository.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/security/JwtAuthFilter.java

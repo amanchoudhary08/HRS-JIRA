@@ -117,17 +117,17 @@ export const searchInput =
   "w-full px-3 py-[7px] border border-border-input rounded-md bg-bg text-text text-sm outline-none transition-colors focus:border-brand";
 
 export const searchDropdown =
-  "absolute top-[calc(100%+6px)] left-0 right-0 bg-bg-card border border-border rounded-lg shadow-search z-[200] max-h-[420px] overflow-y-auto";
+  "popup-panel absolute top-[calc(100%+6px)] left-0 right-0 z-[200] max-h-[420px] overflow-y-auto";
 
-export const searchEmpty = "px-3.5 py-3.5 text-text-muted text-[0.85rem]";
+export const searchEmpty = "popup-muted px-3.5 py-3.5 text-[0.85rem]";
 
-export const searchGroup = "py-1 [&+&]:border-t [&+&]:border-border";
+export const searchGroup = "py-1 [&+&]:border-t [&+&]:border-[rgba(255,255,255,0.08)]";
 
 export const searchGroupHeader =
-  "px-3.5 pt-1.5 pb-1 text-[0.72rem] font-semibold uppercase tracking-[0.06em] text-text-muted";
+  "popup-muted px-3.5 pt-1.5 pb-1 text-[0.72rem] font-semibold uppercase tracking-[0.06em]";
 
 export const searchItem =
-  "flex items-center gap-2 w-full px-3.5 py-2 bg-transparent border-none text-left cursor-pointer text-sm text-text transition-colors hover:bg-bg";
+  "popup-row flex items-center gap-2 w-full px-3.5 py-2 border-none text-left cursor-pointer text-sm transition-colors";
 
 export const searchItemTitle =
   "flex-1 whitespace-nowrap overflow-hidden text-ellipsis";
@@ -151,10 +151,10 @@ export const labelPickerToggle =
   "bg-transparent border border-dashed border-border-input rounded-md px-2.5 py-[3px] text-[0.78rem] text-text-muted cursor-pointer transition-colors hover:border-brand hover:text-brand";
 
 export const labelPickerDropdown =
-  "absolute top-[calc(100%+6px)] left-0 min-w-[180px] bg-bg-card border border-border rounded-lg shadow-search z-[150] max-h-[240px] overflow-y-auto";
+  "popup-panel absolute top-[calc(100%+6px)] left-0 min-w-[180px] z-[150] max-h-[240px] overflow-y-auto";
 
 export const labelPickerOption =
-  "flex items-center gap-2 w-full px-3.5 py-2 bg-transparent border-none text-left cursor-pointer text-sm text-text transition-colors hover:bg-bg";
+  "popup-row flex items-center gap-2 w-full px-3.5 py-2 border-none text-left cursor-pointer text-sm transition-colors";
 
 export const labelDot = "w-2.5 h-2.5 rounded-full shrink-0";
 

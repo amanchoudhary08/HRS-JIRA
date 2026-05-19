@@ -92,6 +92,16 @@ export type Comment = {
   updated_at: string;
 };
 
+export type TaskLink = {
+  id: string;
+  source_task_id: string;
+  source_task_title: string;
+  target_task_id: string;
+  target_task_title: string;
+  link_type: "blocks" | "is_blocked_by" | "relates_to" | "duplicates";
+  created_by_id: string;
+};
+
 export type SSETaskEvent =
   | { type: "task_created"; data: Task }
   | { type: "task_updated"; data: Task }
@@ -104,7 +114,21 @@ export type SSETaskEvent =
   | {
       type: "comment_deleted";
       data: { id: string; task_id: string; project_id: string };
-    };
+    }
+  | { type: "activity_created"; data: ActivityEvent };
+
+export type Attachment = {
+  id: string;
+  task_id: string;
+  project_id: string;
+  filename: string;
+  original_name: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_by_id: string;
+  uploaded_by_name: string;
+  created_at: string;
+};
 
 export type AuthContextValue = {
   token: string | null;
@@ -112,6 +136,7 @@ export type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  loginWithToken: (token: string, user: User) => void;
 };
 
 export type ProjectStats = {

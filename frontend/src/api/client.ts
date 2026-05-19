@@ -219,3 +219,43 @@ export function deleteAttachment(
     { method: "DELETE", token },
   );
 }
+
+// ─── Task Link API helpers ────────────────────────────────────────────────────
+
+import type { TaskLink } from "../types";
+
+export function fetchTaskLinks(
+  projectId: string,
+  taskId: string,
+  token: string,
+): Promise<{ links: TaskLink[] }> {
+  return request<{ links: TaskLink[] }>(
+    `/projects/${projectId}/tasks/${taskId}/links`,
+    { token },
+  );
+}
+
+export function createTaskLink(
+  projectId: string,
+  taskId: string,
+  body: { targetTaskId: string; linkType: string },
+  token: string,
+): Promise<TaskLink> {
+  return request<TaskLink>(`/projects/${projectId}/tasks/${taskId}/links`, {
+    method: "POST",
+    body: { target_task_id: body.targetTaskId, link_type: body.linkType },
+    token,
+  });
+}
+
+export function deleteTaskLink(
+  projectId: string,
+  taskId: string,
+  linkId: string,
+  token: string,
+): Promise<void> {
+  return request<void>(
+    `/projects/${projectId}/tasks/${taskId}/links/${linkId}`,
+    { method: "DELETE", token },
+  );
+}
