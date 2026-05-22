@@ -12,6 +12,7 @@ import {
   deleteTaskLink,
   searchUsers,
 } from "../api/client";
+import { AttachmentZone } from "./AttachmentZone";
 import { Field } from "./Field";
 import { TypeIcon } from "./TypeIcon";
 import { labelStatus } from "../utils/labelStatus";
@@ -1079,6 +1080,23 @@ export function TaskModal({
                     })}
                   </div>
                 )}
+              </div>
+            </>
+          )}
+
+          {/* ── Attachments (only when editing an existing task) ─────── */}
+          {task && (
+            <>
+              <div className={cx.drawerDivider} />
+              <div>
+                <p className={cx.drawerSectionTitle}>Attachments</p>
+                <AttachmentZone
+                  projectId={projectId}
+                  taskId={task.id}
+                  token={token}
+                  currentUserId={currentUser?.id}
+                  isOwner={!!_canEdit}
+                />
               </div>
             </>
           )}
