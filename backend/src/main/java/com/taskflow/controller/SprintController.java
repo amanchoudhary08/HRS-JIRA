@@ -170,6 +170,9 @@ public class SprintController {
         if (!projectRepo.existsAccessibleByUserAndId(projectId, user.getId())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "not found"));
         }
+        if (!isAdminOrOwner(user.getId(), projectId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "forbidden"));
+        }
         Sprint sprint = sprintRepo.findByIdAndProjectId(sprintId, projectId).orElse(null);
         if (sprint == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "sprint not found"));
         Task task = taskRepo.findByIdAndProjectId(taskId, projectId).orElse(null);
@@ -192,6 +195,9 @@ public class SprintController {
 
         if (!projectRepo.existsAccessibleByUserAndId(projectId, user.getId())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "not found"));
+        }
+        if (!isAdminOrOwner(user.getId(), projectId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "forbidden"));
         }
         Task task = taskRepo.findByIdAndProjectId(taskId, projectId).orElse(null);
         if (task == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "task not found"));

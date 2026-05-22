@@ -8,6 +8,8 @@ import com.taskflow.repository.ProjectRepository;
 import com.taskflow.repository.SprintRepository;
 import com.taskflow.repository.TaskRepository;
 import com.taskflow.repository.UserRepository;
+import com.taskflow.service.ActivityService;
+import com.taskflow.service.NotificationService;
 import com.taskflow.sse.EventBroker;
 import com.taskflow.sse.SseEvent;
 import org.springframework.data.domain.Page;
@@ -32,15 +34,20 @@ public class TaskController {
     private final UserRepository userRepo;
     private final SprintRepository sprintRepo;
     private final EventBroker broker;
+    private final ActivityService activityService;
+    private final NotificationService notificationService;
 
     public TaskController(ProjectRepository projectRepo, TaskRepository taskRepo,
                           UserRepository userRepo, SprintRepository sprintRepo,
-                          EventBroker broker) {
+                          EventBroker broker, ActivityService activityService,
+                          NotificationService notificationService) {
         this.projectRepo = projectRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
         this.sprintRepo = sprintRepo;
         this.broker = broker;
+        this.activityService = activityService;
+        this.notificationService = notificationService;
     }
 
     public record CreateTaskRequest(
@@ -151,6 +158,22 @@ public class TaskController {
         task = taskRepo.save(task);
         TaskDto dto = TaskDto.from(task);
         broker.publish(projectId, new SseEvent("task_created", dto));
+        // Log activity
+        activityService.log(projectId, task.getId(), user.getId(), "task_created",
+                ActivityService.payload("title", task.getTitle(), "type", task.getType()));
+        if (task.getParent() != null) {
+            activityService.log(projectId, task.getParent().getId(), user.getId(), "subtask_created",
+                    ActivityService.payload("title", task.getTitle(), "type", task.getType()));
+        }
+        // Notify assignee if they are not the creator
+        if (task.getAssignee() != null && !task.getAssignee().getId().equals(user.getId())) {
+            notificationService.notify(task.getAssignee().getId(), "task_assigned",
+                    NotificationService.payload(
+                            "taskId", task.getId().toString(),
+                            "taskTitle", task.getTitle(),
+                            "projectId", projectId.toString(),
+                            "assignedBy", user.getName()));
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
@@ -183,6 +206,19 @@ public class TaskController {
         if (!errors.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "validation failed", "fields", errors));
         }
+
+        // Capture old values before mutation for activity logging
+        String oldTitle = task.getTitle();
+        String oldStatus = task.getStatus().name();
+        String oldPriority = task.getPriority().name();
+        String oldType = task.getType();
+        UUID oldAssigneeId = task.getAssignee() != null ? task.getAssignee().getId() : null;
+        String oldAssigneeName = oldAssigneeId != null
+                ? userRepo.findById(oldAssigneeId).map(User::getName).orElse("Unknown") : null;
+        LocalDate oldDueDate = task.getDueDate();
+        UUID oldSprintId = task.getSprint() != null ? task.getSprint().getId() : null;
+        String oldSprintName = oldSprintId != null
+                ? sprintRepo.findById(oldSprintId).map(Sprint::getName).orElse("Unknown") : null;
 
         task.setTitle(title);
         task.setDescription(description == null || description.isEmpty() ? null : description);
@@ -223,6 +259,55 @@ public class TaskController {
         task.setStoryPoints(req.storyPoints());
 
         task = taskRepo.save(task);
+
+        // Capture new values after save for activity logging
+        UUID newAssigneeId = task.getAssignee() != null ? task.getAssignee().getId() : null;
+        String newAssigneeName = newAssigneeId != null
+                ? userRepo.findById(newAssigneeId).map(User::getName).orElse("Unknown") : null;
+        UUID newSprintId = task.getSprint() != null ? task.getSprint().getId() : null;
+        String newSprintName = newSprintId != null
+                ? sprintRepo.findById(newSprintId).map(Sprint::getName).orElse("Unknown") : null;
+
+        // Log activity for each changed field
+        if (!oldTitle.equals(task.getTitle())) {
+            activityService.log(projectId, taskId, user.getId(), "title_changed",
+                    ActivityService.payload("title", task.getTitle(), "from", oldTitle, "to", task.getTitle()));
+        }
+        if (!oldStatus.equals(task.getStatus().name())) {
+            activityService.log(projectId, taskId, user.getId(), "status_changed",
+                    ActivityService.payload("title", task.getTitle(), "from", oldStatus, "to", task.getStatus().name()));
+        }
+        if (!oldPriority.equals(task.getPriority().name())) {
+            activityService.log(projectId, taskId, user.getId(), "priority_changed",
+                    ActivityService.payload("title", task.getTitle(), "from", oldPriority, "to", task.getPriority().name()));
+        }
+        if (!oldType.equals(task.getType())) {
+            activityService.log(projectId, taskId, user.getId(), "type_changed",
+                    ActivityService.payload("title", task.getTitle(), "from", oldType, "to", task.getType()));
+        }
+        if (!Objects.equals(oldAssigneeId, newAssigneeId)) {
+            activityService.log(projectId, taskId, user.getId(), "assignee_changed",
+                    ActivityService.payload("title", task.getTitle(), "from", oldAssigneeName, "to", newAssigneeName));
+            if (newAssigneeId != null && !newAssigneeId.equals(user.getId())) {
+                notificationService.notify(newAssigneeId, "task_assigned",
+                        NotificationService.payload(
+                                "taskId", task.getId().toString(),
+                                "taskTitle", task.getTitle(),
+                                "projectId", projectId.toString(),
+                                "assignedBy", user.getName()));
+            }
+        }
+        if (!Objects.equals(oldDueDate, task.getDueDate())) {
+            activityService.log(projectId, taskId, user.getId(), "due_date_changed",
+                    ActivityService.payload("title", task.getTitle(),
+                            "from", oldDueDate != null ? oldDueDate.toString() : null,
+                            "to", task.getDueDate() != null ? task.getDueDate().toString() : null));
+        }
+        if (!Objects.equals(oldSprintId, newSprintId)) {
+            activityService.log(projectId, taskId, user.getId(), "sprint_changed",
+                    ActivityService.payload("title", task.getTitle(), "from", oldSprintName, "to", newSprintName));
+        }
+
         TaskDto dto = TaskDto.from(task);
         broker.publish(projectId, new SseEvent("task_updated", dto));
         return ResponseEntity.ok(dto);
@@ -280,8 +365,11 @@ public class TaskController {
         if (!isOwner && !isCreator) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "forbidden"));
         }
+        String deletedTitle = task.getTitle();
         taskRepo.delete(task);
         broker.publish(projectId, new SseEvent("task_deleted", Map.of("id", taskId.toString(), "project_id", projectId.toString())));
+        activityService.log(projectId, null, user.getId(), "task_deleted",
+                ActivityService.payload("title", deletedTitle));
         return ResponseEntity.noContent().build();
     }
 

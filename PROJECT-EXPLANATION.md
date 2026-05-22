@@ -445,7 +445,7 @@ Data Transfer Objects define what the API returns (never raw entities).
 
 | DTO                | Fields                                                                                                                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `UserDto`          | `id`, `name`, `email`                                                                                                                                                                                                                                  |
+| `UserDto`          | `id`, `name`, `email`, `empId` (employee ID, nullable)                                                                                                                                                                                                 |
 | `ProjectDto`       | `id`, `name`, `description`, `ownerId`, `createdAt`, `members` (optional — omitted when null)                                                                                                                                                          |
 | `ProjectMemberDto` | `projectId`, `userId`, `userName`, `userEmail`, `role`, `joinedAt`                                                                                                                                                                                     |
 | `TaskDto`          | `id`, `title`, `description`, `status`, `priority`, `type`, `projectId`, `assigneeId`, `createdBy`, `parentId`, `sprintId`, `position`, `storyPoints`, `dueDate`, `createdAt`, `updatedAt`, `labels` (`List<LabelDto>`, sorted alphabetically by name) |
@@ -544,15 +544,17 @@ Base URL: `http://localhost:4000`
 
 #### `AuthController` — `/auth`
 
-| Method | Path             | Auth     | Request Body                | Response                   |
-| ------ | ---------------- | -------- | --------------------------- | -------------------------- |
-| `POST` | `/auth/register` | Public   | `{ name, email, password }` | `201 { token, user }`      |
-| `POST` | `/auth/login`    | Public   | `{ email, password }`       | `200 { token, user }`      |
-| `GET`  | `/users`         | Required | —                           | `200 { users: UserDto[] }` |
+| Method | Path             | Auth     | Request Body                | Response                                      |
+| ------ | ---------------- | -------- | --------------------------- | --------------------------------------------- |
+| `POST` | `/auth/register` | Public   | `{ name, email, password }` | `201 { token, user }`                         |
+| `POST` | `/auth/login`    | Public   | `{ email, password }`       | `200 { token, user }`                         |
+| `GET`  | `/users`         | Required | —                           | `200 { users: UserDto[] }`                    |
+| `GET`  | `/users/search`  | Required | `?q=`                       | `200 { users: UserDto[] }` (up to 10 matches) |
 
 - Passwords are BCrypt-hashed (strength 12) before storage
 - JWT token is returned immediately on register and login
 - `GET /users` returns all users sorted alphabetically (used for assignee dropdown)
+- `GET /users/search` returns users whose name contains `q` (case-insensitive); used by the `@mention` typeahead dropdown in comments
 
 ---
 
@@ -1463,6 +1465,7 @@ Routes are defined in `src/App.tsx` using React Router v6.
 | `/projects/:id`           | `ProjectDetailPage`          | Protected |
 | `/projects/:id/board`     | `BoardPage`                  | Protected |
 | `/projects/:id/dashboard` | `DashboardPage`              | Protected |
+| `/api`                    | `ApiReferencePage`           | Protected |
 
 ---
 
@@ -1663,7 +1666,7 @@ The main working view for a single project. Most complex page in the app.
 Vertical left-side navigation panel inside `ProjectDetailPage`.
 
 - **Tab buttons**: Tasks, Members (with `memberCount` pill), Activity, Labels (with `labelCount` pill)
-- **Navigation links**: Board ⚡ (`/projects/:id/board`), Dashboard 📊 (`/projects/:id/dashboard`)
+- **Navigation links**: Board ⚡ (`/projects/:id/board`), Dashboard 📊 (`/projects/:id/dashboard`), API Docs 📄 (`/api`)
 - A `sidebar-divider` visually separates tab buttons from page navigation links
 - Active state: tab buttons use `activeTab` prop; board/dashboard links detected via `useLocation` path match
 - Navigation: within `ProjectDetailPage`, tab buttons call `onTabChange` callback; otherwise navigates via `?tab=` query param
@@ -1846,6 +1849,17 @@ Full Kanban board page at `/projects/:id/board`, built with `@dnd-kit/core` and 
 
 - Listens for `task_created`, `task_updated`, `task_deleted`, `task_moved`, `sprint_started`, `sprint_completed`
 - Board updates in real-time across all browser tabs
+
+---
+
+#### `ApiReferencePage` (`src/pages/ApiReferencePage.tsx`)
+
+Interactive API documentation page at `/api`, accessible via the **"API Docs 📄"** link in `ProjectSidebar`.
+
+- Displays a full static reference of every endpoint grouped by controller: Auth, Projects, Tasks, Comments, Sprints, Labels, Attachments, Search, Notifications, Task Links
+- Each endpoint entry shows: HTTP method badge (colour-coded), path, short description, request body/params, and example response
+- No live requests are made — purely a developer reference rendered from hardcoded definitions
+- Protected route (requires login)
 
 ---
 

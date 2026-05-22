@@ -91,6 +91,12 @@ export function TaskModal({
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
   const [showSubtaskForm, setShowSubtaskForm] = useState(false);
   const [subtaskTitle, setSubtaskTitle] = useState("");
+  const [subtaskDescription, setSubtaskDescription] = useState("");
+  const [subtaskType, setSubtaskType] = useState<Task["type"]>("task");
+  const [subtaskPriority, setSubtaskPriority] =
+    useState<Task["priority"]>("medium");
+  const [subtaskAssignee, setSubtaskAssignee] = useState("");
+  const [subtaskDueDate, setSubtaskDueDate] = useState("");
   const [savingSubtask, setSavingSubtask] = useState(false);
 
   // Parent task (for breadcrumb)
@@ -134,6 +140,12 @@ export function TaskModal({
     setSubtasks([]);
     setParentTask(null);
     setShowSubtaskForm(false);
+    setSubtaskTitle("");
+    setSubtaskDescription("");
+    setSubtaskType("task");
+    setSubtaskPriority("medium");
+    setSubtaskAssignee("");
+    setSubtaskDueDate("");
     setLinks([]);
     setShowLinkForm(false);
     setLinkTargetSearch("");
@@ -406,10 +418,23 @@ export function TaskModal({
       const created = await request<Task>(`/projects/${projectId}/tasks`, {
         method: "POST",
         token,
-        body: { title: subtaskTitle.trim(), type: "task", parent_id: task.id },
+        body: {
+          title: subtaskTitle.trim(),
+          description: subtaskDescription.trim() || undefined,
+          type: subtaskType,
+          priority: subtaskPriority,
+          assignee_id: subtaskAssignee || undefined,
+          due_date: subtaskDueDate || undefined,
+          parent_id: task.id,
+        },
       });
       setSubtasks((prev) => [...prev, created]);
       setSubtaskTitle("");
+      setSubtaskDescription("");
+      setSubtaskType("task");
+      setSubtaskPriority("medium");
+      setSubtaskAssignee("");
+      setSubtaskDueDate("");
       setShowSubtaskForm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create subtask");
@@ -644,24 +669,107 @@ export function TaskModal({
 
                 {showSubtaskForm && (
                   <form
-                    className={cx.commentForm}
-                    style={{ marginBottom: 10 }}
+                    style={{
+                      marginBottom: 10,
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 8,
+                      padding: 12,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                    }}
                     onSubmit={submitSubtask}
                   >
-                    <input
-                      className={cx.fieldInput}
-                      value={subtaskTitle}
-                      onChange={(e) => setSubtaskTitle(e.target.value)}
-                      placeholder="Subtask title..."
-                      autoFocus
-                    />
-                    <div className={cx.row}>
+                    <Field label="Title *">
+                      <input
+                        className={cx.fieldInput}
+                        value={subtaskTitle}
+                        onChange={(e) => setSubtaskTitle(e.target.value)}
+                        placeholder="Subtask title..."
+                        autoFocus
+                      />
+                    </Field>
+                    <Field label="Description">
+                      <textarea
+                        className={cx.fieldInput}
+                        value={subtaskDescription}
+                        onChange={(e) => setSubtaskDescription(e.target.value)}
+                        placeholder="Optional description..."
+                        rows={2}
+                        style={{ resize: "vertical" }}
+                      />
+                    </Field>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 8,
+                      }}
+                    >
+                      <Field label="Type">
+                        <select
+                          className={cx.fieldInput}
+                          value={subtaskType}
+                          onChange={(e) =>
+                            setSubtaskType(e.target.value as Task["type"])
+                          }
+                        >
+                          <option value="task">Task</option>
+                          <option value="bug">Bug</option>
+                          <option value="story">Story</option>
+                          <option value="epic">Epic</option>
+                        </select>
+                      </Field>
+                      <Field label="Priority">
+                        <select
+                          className={cx.fieldInput}
+                          value={subtaskPriority}
+                          onChange={(e) =>
+                            setSubtaskPriority(
+                              e.target.value as Task["priority"],
+                            )
+                          }
+                        >
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                        </select>
+                      </Field>
+                      <Field label="Assignee">
+                        <select
+                          className={cx.fieldInput}
+                          value={subtaskAssignee}
+                          onChange={(e) => setSubtaskAssignee(e.target.value)}
+                        >
+                          <option value="">Unassigned</option>
+                          {users.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Due date">
+                        <input
+                          type="date"
+                          className={cx.fieldInput}
+                          value={subtaskDueDate}
+                          min={new Date().toISOString().split("T")[0]}
+                          onChange={(e) => setSubtaskDueDate(e.target.value)}
+                        />
+                      </Field>
+                    </div>
+                    <div className={cx.row} style={{ marginTop: 4 }}>
                       <button
                         className={cx.btn}
                         style={{ fontSize: "0.82rem", padding: "4px 12px" }}
-                        disabled={savingSubtask || !subtaskTitle.trim()}
+                        disabled={
+                          savingSubtask ||
+                          !subtaskTitle.trim() ||
+                          !subtaskDueDate
+                        }
                       >
-                        {savingSubtask ? "Adding..." : "Add"}
+                        {savingSubtask ? "Adding..." : "Add subtask"}
                       </button>
                       <button
                         type="button"
@@ -670,6 +778,11 @@ export function TaskModal({
                         onClick={() => {
                           setShowSubtaskForm(false);
                           setSubtaskTitle("");
+                          setSubtaskDescription("");
+                          setSubtaskType("task");
+                          setSubtaskPriority("medium");
+                          setSubtaskAssignee("");
+                          setSubtaskDueDate("");
                         }}
                       >
                         Cancel
