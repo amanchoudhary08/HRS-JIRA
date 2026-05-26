@@ -23,10 +23,14 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final OAuth2SuccessHandler oauth2SuccessHandler;
+    private final RateLimitFilter rateLimitFilter;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter, OAuth2SuccessHandler oauth2SuccessHandler) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter,
+                          OAuth2SuccessHandler oauth2SuccessHandler,
+                          RateLimitFilter rateLimitFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.oauth2SuccessHandler = oauth2SuccessHandler;
+        this.rateLimitFilter = rateLimitFilter;
     }
 
     @Bean
@@ -57,6 +61,7 @@ public class SecurityConfig {
                     res.getWriter().write("{\"error\":\"forbidden\"}");
                 })
             )
+            .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
@@ -71,6 +76,13 @@ public class SecurityConfig {
     @Bean
     public FilterRegistrationBean<JwtAuthFilter> jwtAuthFilterRegistration(JwtAuthFilter filter) {
         FilterRegistrationBean<JwtAuthFilter> reg = new FilterRegistrationBean<>(filter);
+        reg.setEnabled(false);
+        return reg;
+    }
+
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(RateLimitFilter filter) {
+        FilterRegistrationBean<RateLimitFilter> reg = new FilterRegistrationBean<>(filter);
         reg.setEnabled(false);
         return reg;
     }
