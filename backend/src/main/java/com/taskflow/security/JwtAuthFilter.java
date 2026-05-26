@@ -6,6 +6,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -28,19 +29,24 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain chain) throws ServletException, IOException {
+    protected void doFilterInternal(@NonNull HttpServletRequest request,
+                                    @NonNull HttpServletResponse response,
+                                    @NonNull FilterChain chain) throws ServletException, IOException {
         // For SSE endpoints the browser EventSource cannot set headers, so the JWT
         // is passed as a ?token= query parameter instead.
+        // Restrict ?token= to SSE paths only to avoid JWT exposure in logs.
         String header = request.getHeader("Authorization");
         String token = null;
         if (header != null && header.startsWith("Bearer ")) {
             token = header.substring(7);
         } else {
-            String queryToken = request.getParameter("token");
-            if (queryToken != null && !queryToken.isEmpty()) {
-                token = queryToken;
+            String path = request.getRequestURI();
+            boolean isSsePath = path.endsWith("/events");
+            if (isSsePath) {
+                String queryToken = request.getParameter("token");
+                if (queryToken != null && !queryToken.isEmpty()) {
+                    token = queryToken;
+                }
             }
         }
 

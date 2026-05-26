@@ -18,16 +18,28 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    // 200 requests per minute per IP
+    // 200 requests per minute per IP (global)
     private static final int REQUESTS_PER_MINUTE = 200;
+    // 10 login/register attempts per minute per IP
+    private static final int AUTH_REQUESTS_PER_MINUTE = 10;
 
     private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Bucket> authBuckets = new ConcurrentHashMap<>();
 
     private Bucket bucketForIp(String ip) {
         return buckets.computeIfAbsent(ip, k -> Bucket.builder()
                 .addLimit(Bandwidth.builder()
                         .capacity(REQUESTS_PER_MINUTE)
                         .refillGreedy(REQUESTS_PER_MINUTE, Duration.ofMinutes(1))
+                        .build())
+                .build());
+    }
+
+    private Bucket authBucketForIp(String ip) {
+        return authBuckets.computeIfAbsent(ip, k -> Bucket.builder()
+                .addLimit(Bandwidth.builder()
+                        .capacity(AUTH_REQUESTS_PER_MINUTE)
+                        .refillGreedy(AUTH_REQUESTS_PER_MINUTE, Duration.ofMinutes(1))
                         .build())
                 .build());
     }
@@ -39,7 +51,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String ip = resolveClientIp(request);
-        Bucket bucket = bucketForIp(ip);
+        String path = request.getRequestURI();
+
+        // Tighter limit on auth endpoints to prevent brute force
+        boolean isAuthPath = path.equals("/auth/login") || path.equals("/auth/register");
+        Bucket bucket = isAuthPath ? authBucketForIp(ip) : bucketForIp(ip);
 
         if (bucket.tryConsume(1)) {
             filterChain.doFilter(request, response);

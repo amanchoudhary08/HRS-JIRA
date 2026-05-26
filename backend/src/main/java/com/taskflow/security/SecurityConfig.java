@@ -90,7 +90,9 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsSource() {
         CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOriginPatterns(List.of("*"));
+        // Restrict to the actual frontend origin; falls back to localhost for local dev
+        String frontendUrl = System.getenv().getOrDefault("FRONTEND_URL", "http://localhost:5173");
+        cfg.setAllowedOriginPatterns(List.of(frontendUrl, "http://localhost:[*]"));
         cfg.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         cfg.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
