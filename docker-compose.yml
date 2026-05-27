@@ -39,6 +39,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       S3_BUCKET: ${S3_BUCKET:-taskflow-attachments}
       INTERNAL_SECRET: ${INTERNAL_SECRET:-changeme-internal-secret-32chars}
+      AI_URL: http://ai:8000
     depends_on:
       db:
         condition: service_healthy
@@ -64,7 +65,6 @@ services:
     build:
       context: ./HRS_AI/backend
     environment:
-      DATABASE_URL: sqlite+aiosqlite:///./hrsai.db
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       JWT_ALGORITHM: HS256
       AWS_REGION: ${AWS_REGION:-eu-central-1}
@@ -76,8 +76,9 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       INTERNAL_SECRET: ${INTERNAL_SECRET:-changeme-internal-secret-32chars}
       ENV: production
+      DATABASE_URL: sqlite+aiosqlite:////app/data/hrsai.db
     volumes:
-      - ai_data:/app
+      - ai_data:/app/data
     ports:
       - "8000:8000"
     depends_on:

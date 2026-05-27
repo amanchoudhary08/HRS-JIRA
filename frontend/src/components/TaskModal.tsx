@@ -38,6 +38,17 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
+interface AISuggestion {
+  id: string;
+  content: {
+    priority?: string;
+    labels?: string[];
+    story_points?: number;
+    reasoning?: string;
+  };
+  accepted: boolean;
+}
+
 export function TaskModal({
   projectId,
   token,
@@ -81,6 +92,13 @@ export function TaskModal({
   );
   const [error, setError] = useState("");
   const [showAIPanel, setShowAIPanel] = useState(false);
+
+  // AI triage suggestion state
+  const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
+  const [aiSuggestionDismissed, setAiSuggestionDismissed] = useState(false);
+  const [aiSuggestionLoading, setAiSuggestionLoading] = useState(false);
+  // Ref to avoid stale-closure bug in the retry timer
+  const aiSuggestionFetchedRef = useRef(false);
 
   // Auto-dismiss error after 3 seconds
   useEffect(() => {
@@ -154,6 +172,10 @@ export function TaskModal({
     setShowLinkForm(false);
     setLinkTargetSearch("");
     setLinkSearchResults([]);
+    // Reset AI suggestion state when task changes
+    setAiSuggestion(null);
+    setAiSuggestionDismissed(false);
+    aiSuggestionFetchedRef.current = false;
   }, [task?.id]);
 
   // Load comments + subtasks + parent when a task is opened
@@ -196,6 +218,50 @@ export function TaskModal({
       .then((data) => setLinks(data.links))
       .catch(() => setLinks([]))
       .finally(() => setLoadingLinks(false));
+
+    // Fetch AI triage suggestions (poll once; retry after 3s if empty)
+    const fetchSuggestions = async () => {
+      if (!token) return;
+      setAiSuggestionLoading(true);
+      try {
+        const data = await request<{ suggestions: AISuggestion[] }>(
+          `/projects/${projectId}/tasks/${task.id}/ai-suggestions`,
+          { token },
+        );
+        const pending = data.suggestions.find((s) => !s.accepted);
+        if (pending) {
+          aiSuggestionFetchedRef.current = true;
+          setAiSuggestion(pending);
+          setAiSuggestionLoading(false);
+        } else {
+          setAiSuggestionLoading(false);
+        }
+      } catch {
+        setAiSuggestionLoading(false);
+      }
+    };
+    fetchSuggestions();
+    // Retry once after 4 seconds in case AI hasn't responded yet
+    const retryTimer = setTimeout(async () => {
+      if (aiSuggestionFetchedRef.current || aiSuggestionDismissed) return;
+      setAiSuggestionLoading(true);
+      try {
+        const data = await request<{ suggestions: AISuggestion[] }>(
+          `/projects/${projectId}/tasks/${task.id}/ai-suggestions`,
+          { token },
+        );
+        const pending = data.suggestions.find((s) => !s.accepted);
+        if (pending) {
+          aiSuggestionFetchedRef.current = true;
+          setAiSuggestion(pending);
+        }
+      } catch {
+        /* silent */
+      } finally {
+        setAiSuggestionLoading(false);
+      }
+    }, 4000);
+    return () => clearTimeout(retryTimer);
   }, [task?.id]);
 
   // Handle live SSE comment events
@@ -224,6 +290,27 @@ export function TaskModal({
       }
     }
   }, [commentEvent]);
+
+  async function acceptAISuggestion() {
+    if (!aiSuggestion || !task) return;
+    try {
+      await request(
+        `/projects/${projectId}/tasks/${task.id}/ai-suggestions/${aiSuggestion.id}/accept`,
+        { method: "PATCH", token },
+      );
+      // Apply suggested values to form
+      if (aiSuggestion.content.priority) {
+        setPriority(aiSuggestion.content.priority as Task["priority"]);
+      }
+      if (aiSuggestion.content.story_points != null) {
+        setStoryPoints(String(aiSuggestion.content.story_points));
+      }
+    } catch {
+      /* silent — user still sees the values applied */
+    }
+    setAiSuggestionDismissed(true);
+    setAiSuggestion(null);
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -521,6 +608,120 @@ export function TaskModal({
               >
                 ×
               </button>
+            </div>
+          )}
+
+          {/* ── AI Triage Suggestion Banner ───────────────────────────── */}
+          {task && aiSuggestionLoading && !aiSuggestion && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 12px",
+                borderRadius: 8,
+                marginBottom: 10,
+                fontSize: "0.8rem",
+                background: "rgba(34,211,238,0.06)",
+                border: "1px solid rgba(34,211,238,0.15)",
+                color: "#64748b",
+              }}
+            >
+              <Sparkles size={13} style={{ color: "#22d3ee", flexShrink: 0 }} />
+              <span>AI triage in progress…</span>
+            </div>
+          )}
+          {task && aiSuggestion && !aiSuggestionDismissed && (
+            <div
+              style={{
+                padding: "10px 14px",
+                borderRadius: 8,
+                marginBottom: 12,
+                background: "rgba(34,211,238,0.08)",
+                border: "1px solid rgba(34,211,238,0.25)",
+                fontSize: "0.8rem",
+                lineHeight: 1.5,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 6,
+                }}
+              >
+                <Sparkles
+                  size={13}
+                  style={{ color: "#22d3ee", flexShrink: 0 }}
+                />
+                <span style={{ fontWeight: 700, color: "#22d3ee" }}>
+                  AI Triage Suggestion
+                </span>
+              </div>
+              <div style={{ color: "var(--text-muted)", marginBottom: 8 }}>
+                {aiSuggestion.content.reasoning && (
+                  <span style={{ display: "block", marginBottom: 4 }}>
+                    {aiSuggestion.content.reasoning}
+                  </span>
+                )}
+                <span>
+                  <strong>Priority:</strong>{" "}
+                  {aiSuggestion.content.priority ?? "—"}
+                  {aiSuggestion.content.story_points != null && (
+                    <>
+                      {" "}
+                      &nbsp;·&nbsp; <strong>Story points:</strong>{" "}
+                      {aiSuggestion.content.story_points}
+                    </>
+                  )}
+                  {aiSuggestion.content.labels &&
+                    aiSuggestion.content.labels.length > 0 && (
+                      <>
+                        {" "}
+                        &nbsp;·&nbsp; <strong>Labels:</strong>{" "}
+                        {aiSuggestion.content.labels.join(", ")}
+                      </>
+                    )}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={acceptAISuggestion}
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    border: "1px solid rgba(34,211,238,0.4)",
+                    background: "rgba(34,211,238,0.15)",
+                    color: "#22d3ee",
+                    cursor: "pointer",
+                  }}
+                >
+                  Apply suggestion
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAiSuggestionDismissed(true);
+                    setAiSuggestion(null);
+                  }}
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    border: "1px solid rgba(100,116,139,0.3)",
+                    background: "transparent",
+                    color: "#64748b",
+                    cursor: "pointer",
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           )}
 

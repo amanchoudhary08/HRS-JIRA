@@ -4,6 +4,7 @@ import com.taskflow.dto.TaskDto;
 import com.taskflow.entity.Sprint;
 import com.taskflow.entity.Task;
 import com.taskflow.entity.User;
+import com.taskflow.event.TaskCreatedEvent;
 import com.taskflow.repository.ProjectRepository;
 import com.taskflow.repository.SprintRepository;
 import com.taskflow.repository.TaskRepository;
@@ -12,6 +13,8 @@ import com.taskflow.service.ActivityService;
 import com.taskflow.service.NotificationService;
 import com.taskflow.sse.EventBroker;
 import com.taskflow.sse.SseEvent;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -36,11 +39,13 @@ public class TaskController {
     private final EventBroker broker;
     private final ActivityService activityService;
     private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public TaskController(ProjectRepository projectRepo, TaskRepository taskRepo,
                           UserRepository userRepo, SprintRepository sprintRepo,
                           EventBroker broker, ActivityService activityService,
-                          NotificationService notificationService) {
+                          NotificationService notificationService,
+                          ApplicationEventPublisher eventPublisher) {
         this.projectRepo = projectRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
@@ -48,6 +53,7 @@ public class TaskController {
         this.broker = broker;
         this.activityService = activityService;
         this.notificationService = notificationService;
+        this.eventPublisher = eventPublisher;
     }
 
     public record CreateTaskRequest(
@@ -118,7 +124,8 @@ public class TaskController {
     public ResponseEntity<?> createTask(
             @AuthenticationPrincipal User user,
             @PathVariable UUID projectId,
-            @RequestBody CreateTaskRequest req) {
+            @RequestBody CreateTaskRequest req,
+            HttpServletRequest httpRequest) {
 
         if (!projectRepo.existsAccessibleByUserAndId(projectId, user.getId())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "not found"));
@@ -173,6 +180,15 @@ public class TaskController {
                             "taskTitle", task.getTitle(),
                             "projectId", projectId.toString(),
                             "assignedBy", user.getName()));
+        }
+        // Publish async event for AI triage
+        String authHeader = httpRequest.getHeader("Authorization");
+        String userToken = (authHeader != null && authHeader.startsWith("Bearer "))
+                ? authHeader.substring(7) : null;
+        if (userToken != null) {
+            eventPublisher.publishEvent(new TaskCreatedEvent(
+                    this, task.getId(), projectId,
+                    task.getTitle(), task.getDescription(), task.getType(), userToken));
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
