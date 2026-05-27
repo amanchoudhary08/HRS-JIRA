@@ -5,6 +5,7 @@ import React, {
   useState,
   useCallback,
 } from "react";
+import { Sparkles } from "lucide-react";
 import {
   request,
   fetchTaskLinks,
@@ -13,6 +14,7 @@ import {
   searchUsers,
 } from "../api/client";
 import { AttachmentZone } from "./AttachmentZone";
+import { AIPanel } from "./AIPanel";
 import { Field } from "./Field";
 import { TypeIcon } from "./TypeIcon";
 import { labelStatus } from "../utils/labelStatus";
@@ -78,6 +80,7 @@ export function TaskModal({
     task?.story_points != null ? String(task.story_points) : "",
   );
   const [error, setError] = useState("");
+  const [showAIPanel, setShowAIPanel] = useState(false);
 
   // Auto-dismiss error after 3 seconds
   useEffect(() => {
@@ -447,7 +450,7 @@ export function TaskModal({
   return (
     <>
       <div className={cx.drawerBackdrop} onClick={onClose} />
-      <div className={cx.drawer}>
+      <div className={cx.drawer} style={{ position: "fixed" }}>
         <div className={cx.drawerHeader}>
           <h2>
             <TypeIcon
@@ -457,9 +460,37 @@ export function TaskModal({
             />
             {task ? "Task detail" : "New task"}
           </h2>
-          <button className={cx.btnSecondary} type="button" onClick={onClose}>
-            Close
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {task && (
+              <button
+                type="button"
+                title="AI Assistant"
+                onClick={() => setShowAIPanel((v) => !v)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  padding: "5px 10px",
+                  borderRadius: 8,
+                  border: `1px solid ${showAIPanel ? "rgba(34,211,238,0.4)" : "rgba(34,211,238,0.2)"}`,
+                  background: showAIPanel
+                    ? "rgba(34,211,238,0.12)"
+                    : "transparent",
+                  color: showAIPanel ? "#22d3ee" : "#64748b",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                }}
+              >
+                <Sparkles size={13} />
+                AI
+              </button>
+            )}
+            <button className={cx.btnSecondary} type="button" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </div>
         <div className={cx.drawerBody}>
           {error && (
@@ -1338,6 +1369,14 @@ export function TaskModal({
             </>
           )}
         </div>
+        {task && showAIPanel && (
+          <AIPanel
+            task={task}
+            projectId={projectId}
+            comments={comments}
+            onClose={() => setShowAIPanel(false)}
+          />
+        )}
       </div>
     </>
   );

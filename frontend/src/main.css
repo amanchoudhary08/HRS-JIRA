@@ -98,8 +98,12 @@
   color-scheme: dark;
 }
 /* Text colours inside popup */
-.popup-text  { color: #ffffff; }
-.popup-muted { color: rgba(255, 255, 255, 0.5); }
+.popup-text {
+  color: #ffffff;
+}
+.popup-muted {
+  color: rgba(255, 255, 255, 0.5);
+}
 /* Row buttons */
 .popup-row {
   color: #ffffff;
@@ -109,6 +113,256 @@
   background: rgba(255, 255, 255, 0.1);
 }
 /* Dividers */
-.popup-divider-b { border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
-.popup-divider-t { border-top:    1px solid rgba(255, 255, 255, 0.08); }
-.popup-divider-header { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.popup-divider-b {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.popup-divider-t {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.popup-divider-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   AI Workspace — design tokens & component classes
+   (used by pages under /ai/*)
+   ═══════════════════════════════════════════════════════════ */
+
+/* CSS custom-properties (used via var(--*)) */
+:root {
+  --arc: #22d3ee;
+  --arc-dim: rgba(34, 211, 238, 0.6);
+  --arc-glow: rgba(34, 211, 238, 0.18);
+  --surface-0: #08050f;
+  --surface-1: rgba(255, 255, 255, 0.045);
+  --surface-2: rgba(255, 255, 255, 0.07);
+  --surface-3: rgba(255, 255, 255, 0.1);
+  --border-ai: rgba(255, 255, 255, 0.09);
+  --text-2: #a09ab8;
+  --text-3: #5a5470;
+}
+
+/* Tailwind v4 @theme — generates bg-arc, text-arc, shadow-glow-sm, etc. */
+@theme {
+  --color-arc: #22d3ee;
+  --color-surface-0: #08050f;
+  --color-surface-1: rgba(255, 255, 255, 0.045);
+  --color-surface-2: rgba(255, 255, 255, 0.07);
+  --color-surface-3: rgba(255, 255, 255, 0.1);
+  --shadow-glow: 0 0 20px -4px rgba(34, 211, 238, 0.35);
+  --shadow-glow-sm: 0 0 12px -3px rgba(34, 211, 238, 0.25);
+  --shadow-panel: 0 4px 32px -8px rgba(0, 0, 0, 0.8);
+}
+
+/* Component classes for AI pages */
+.ai-panel,
+.panel {
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-dim {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  cursor: pointer;
+}
+.btn-dim:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #e2e8f0;
+}
+.btn-dim:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-arc {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #08050f;
+  background: #22d3ee;
+  box-shadow: 0 0 16px -4px rgba(34, 211, 238, 0.4);
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+  cursor: pointer;
+  border: none;
+}
+.btn-arc:hover:not(:disabled) {
+  background: #3fddee;
+  box-shadow: 0 0 24px -4px rgba(34, 211, 238, 0.55);
+}
+.btn-arc:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  transition:
+    color 0.15s,
+    background 0.15s;
+  cursor: pointer;
+}
+.btn-ghost:hover:not(:disabled) {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.05);
+}
+.btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  transition: background 0.15s;
+  cursor: pointer;
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+}
+.btn-danger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.field {
+  width: 100%;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #e2e8f0;
+  padding: 0.625rem 0.875rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.field::placeholder {
+  color: #64748b;
+}
+.field:focus {
+  outline: none;
+  border-color: rgba(34, 211, 238, 0.35);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.1);
+}
+.field:hover:not(:focus) {
+  border-color: rgba(255, 255, 255, 0.13);
+}
+
+.section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.75rem;
+  color: var(--text-3);
+}
+
+/* Live indicator dot */
+.dot-live {
+  background: var(--arc);
+  box-shadow: 0 0 6px 1px rgba(34, 211, 238, 0.6);
+  animation: ai-dotPulse 2s ease-in-out infinite;
+}
+@keyframes ai-dotPulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 6px 1px rgba(34, 211, 238, 0.6);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 10px 2px rgba(34, 211, 238, 0.4);
+  }
+}
+
+/* Markdown body (AI responses) */
+.markdown-body {
+  color: #8dadd8;
+  line-height: 1.7;
+}
+.markdown-body h1 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #e8f0fe;
+  margin: 1rem 0 0.4rem;
+}
+.markdown-body h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #c9d8f0;
+  margin: 0.9rem 0 0.3rem;
+}
+.markdown-body h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #9ab8d8;
+  margin: 0.75rem 0 0.25rem;
+}
+.markdown-body p {
+  margin: 0.4rem 0;
+}
+.markdown-body ul {
+  list-style: disc;
+  padding-left: 1.2rem;
+  margin: 0.3rem 0;
+}
+.markdown-body ol {
+  list-style: decimal;
+  padding-left: 1.2rem;
+  margin: 0.3rem 0;
+}
+.markdown-body code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: rgba(34, 211, 238, 0.08);
+  color: #93c5fd;
+}
+.markdown-body pre {
+  margin: 0.5rem 0;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.markdown-body pre code {
+  display: block;
+  padding: 0.75rem;
+  background: rgba(8, 5, 15, 0.8);
+}

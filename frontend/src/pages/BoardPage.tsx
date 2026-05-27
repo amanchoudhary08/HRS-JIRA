@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { Sparkles, X, Loader2 } from "lucide-react";
+import { AI_URL } from "../api/aiClient";
 import {
   DndContext,
   DragEndEvent,
@@ -360,6 +362,96 @@ export function BoardPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // ── AI Sprint Analysis ──────────────────────────────────────────────────────
+  const [aiAnalysing, setAiAnalysing] = useState(false);
+  const [aiOutput, setAiOutput] = useState("");
+  const [showAiOverlay, setShowAiOverlay] = useState(false);
+  const aiAbortRef = useRef<AbortController | null>(null);
+
+  async function analyseSprintWithAI() {
+    if (aiAnalysing) return;
+    aiAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    aiAbortRef.current = ctrl;
+    setAiOutput("");
+    setShowAiOverlay(true);
+    setAiAnalysing(true);
+
+    const sprintTasks = Object.values(columns)
+      .flat()
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        assignee:
+          users.find((u) => u.id === t.assignee_id)?.name ?? "Unassigned",
+        due_date: t.due_date ?? null,
+        story_points: t.story_points ?? null,
+      }));
+
+    try {
+      const tok = localStorage.getItem("taskflow_token");
+      const res = await fetch(`${AI_URL}/api/actions/run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${tok}`,
+        },
+        body: JSON.stringify({
+          template_id: 1,
+          input: {
+            action: "analyze_sprint",
+            sprint_name: currentSprint?.name ?? "Backlog",
+            sprint_goal: currentSprint?.goal ?? "",
+            tasks: sprintTasks,
+            total_tasks: sprintTasks.length,
+            done_count: sprintTasks.filter((t) => t.status === "done").length,
+            blocked_count: sprintTasks.filter((t) => t.status === "blocked")
+              .length,
+          },
+        }),
+        signal: ctrl.signal,
+      });
+
+      if (!res.ok || !res.body) throw new Error("AI request failed");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          try {
+            const evt = JSON.parse(raw);
+            if (evt.type === "chunk" && evt.content)
+              setAiOutput((p) => p + evt.content);
+            else if (evt.type === "step" && evt.step?.output)
+              setAiOutput((p) => p + evt.step.output);
+            else if (evt.type === "error")
+              setAiOutput((p) => p + "\n\n⚠️ " + evt.message);
+          } catch {
+            /* non-JSON SSE */
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setAiOutput(
+          "⚠️ Could not connect to AI service. Make sure the AI container is running.",
+        );
+      }
+    } finally {
+      setAiAnalysing(false);
+    }
+  }
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -659,6 +751,35 @@ export function BoardPage() {
               alignItems: "center",
             }}
           >
+            {selectedSprintId !== "backlog" && (
+              <button
+                onClick={analyseSprintWithAI}
+                disabled={aiAnalysing}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  padding: "5px 12px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(34,211,238,0.3)",
+                  background: aiAnalysing
+                    ? "rgba(34,211,238,0.1)"
+                    : "rgba(34,211,238,0.06)",
+                  color: "#22d3ee",
+                  cursor: aiAnalysing ? "not-allowed" : "pointer",
+                  transition: "all 0.15s",
+                }}
+              >
+                {aiAnalysing ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Sparkles size={12} />
+                )}
+                {aiAnalysing ? "Analysing…" : "AI Analyse Sprint"}
+              </button>
+            )}
             <span
               className={
                 sseConnected
@@ -859,6 +980,177 @@ export function BoardPage() {
           }}
           onOpenTask={(t) => setEditingTask(t)}
         />
+      )}
+
+      {/* AI Sprint Analysis overlay card */}
+      {showAiOverlay && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            right: 24,
+            width: "min(480px, calc(100vw - 48px))",
+            maxHeight: "60vh",
+            zIndex: 50,
+            display: "flex",
+            flexDirection: "column",
+            borderRadius: 14,
+            overflow: "hidden",
+            background: "#0d1117",
+            border: "1px solid rgba(34,211,238,0.2)",
+            boxShadow:
+              "0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(34,211,238,0.08)",
+          }}
+        >
+          {/* Card header */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "12px 16px",
+              borderBottom: "1px solid rgba(34,211,238,0.1)",
+              flexShrink: 0,
+              background: "rgba(34,211,238,0.04)",
+            }}
+          >
+            <Sparkles size={14} style={{ color: "#22d3ee" }} />
+            <span
+              style={{
+                fontWeight: 700,
+                fontSize: "0.85rem",
+                color: "#e2e8f0",
+                flex: 1,
+              }}
+            >
+              AI Sprint Analysis
+              {currentSprint && (
+                <span
+                  style={{ fontWeight: 400, color: "#64748b", marginLeft: 6 }}
+                >
+                  — {currentSprint.name}
+                </span>
+              )}
+            </span>
+            {aiAnalysing && (
+              <Loader2
+                size={13}
+                className="animate-spin"
+                style={{ color: "#22d3ee" }}
+              />
+            )}
+            <button
+              onClick={() => {
+                setShowAiOverlay(false);
+                aiAbortRef.current?.abort();
+                setAiAnalysing(false);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#64748b",
+                display: "flex",
+                padding: 3,
+                borderRadius: 5,
+              }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          {/* Output */}
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: "14px 16px",
+              fontSize: "0.8rem",
+              lineHeight: 1.7,
+              color: "#94a3b8",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {aiOutput ? (
+              <>
+                {aiOutput}
+                {aiAnalysing && (
+                  <span style={{ color: "#22d3ee" }} className="animate-pulse">
+                    █
+                  </span>
+                )}
+              </>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  color: "#475569",
+                }}
+              >
+                <Loader2
+                  size={14}
+                  className="animate-spin"
+                  style={{ color: "#22d3ee" }}
+                />
+                Connecting to AI service…
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          {!aiAnalysing && aiOutput && (
+            <div
+              style={{
+                padding: "8px 16px",
+                borderTop: "1px solid rgba(34,211,238,0.07)",
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 6,
+                flexShrink: 0,
+              }}
+            >
+              <button
+                onClick={() => {
+                  setAiOutput("");
+                  analyseSprintWithAI();
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontSize: "0.72rem",
+                  fontWeight: 600,
+                  padding: "3px 10px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(34,211,238,0.2)",
+                  background: "transparent",
+                  color: "#22d3ee",
+                  cursor: "pointer",
+                }}
+              >
+                <Sparkles size={10} /> Re-analyse
+              </button>
+              <button
+                onClick={() => setShowAiOverlay(false)}
+                style={{
+                  fontSize: "0.72rem",
+                  fontWeight: 600,
+                  padding: "3px 10px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  background: "transparent",
+                  color: "#475569",
+                  cursor: "pointer",
+                }}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </Layout>
   );
