@@ -95,6 +95,17 @@ export function ProjectSidebar({
       >
         API Docs 📋
       </Link>
+      <Link
+        to={`/projects/${projectId}/pipeline`}
+        className={
+          location.pathname.endsWith("/pipeline")
+            ? cx.sidebarBtnActive
+            : cx.sidebarBtn
+        }
+        style={{ textDecoration: "none" }}
+      >
+        Pipeline 🔀
+      </Link>
     </div>
   );
 }

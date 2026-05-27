@@ -52,11 +52,12 @@
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/security/JwtAuthFilter.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/security/JwtUtil.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/security/OAuth2SuccessHandler.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/security/RateLimitFilter.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/security/SecurityConfig.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/service/ActivityService.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/service/AttachmentService.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/service/EmailService.java
-/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/service/MinioConfig.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/service/NotificationService.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/service/S3Config.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/sse/EventBroker.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/sse/SseEvent.java

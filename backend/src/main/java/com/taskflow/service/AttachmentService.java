@@ -1,12 +1,15 @@
 package com.taskflow.service;
 
-import io.minio.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.UUID;
 
@@ -29,17 +32,17 @@ public class AttachmentService {
             "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     );
 
-    private final MinioClient minioClient;
+    private final S3Client s3Client;
     private final String bucket;
 
-    public AttachmentService(MinioClient minioClient,
-                             @Value("${app.minio.bucket}") String bucket) {
-        this.minioClient = minioClient;
+    public AttachmentService(S3Client s3Client,
+                             @Value("${app.s3.bucket}") String bucket) {
+        this.s3Client = s3Client;
         this.bucket = bucket;
     }
 
-    /** Validate, upload to MinIO, and return the generated storage key. */
-    public String upload(MultipartFile file) throws Exception {
+    /** Validate, upload to S3, and return the generated storage key. */
+    public String upload(MultipartFile file) throws IOException {
         if (file.getSize() > MAX_SIZE_BYTES) {
             throw new IllegalArgumentException("File exceeds the 50 MB limit.");
         }
@@ -47,43 +50,37 @@ public class AttachmentService {
         if (!isMimeAllowed(mime)) {
             throw new IllegalArgumentException("File type not allowed: " + mime);
         }
-        ensureBucketExists();
         String key = UUID.randomUUID() + "/" + sanitizeFilename(file.getOriginalFilename());
         try (InputStream in = file.getInputStream()) {
-            minioClient.putObject(PutObjectArgs.builder()
-                    .bucket(bucket)
-                    .object(key)
-                    .stream(in, file.getSize(), -1)
-                    .contentType(mime)
-                    .build());
+            s3Client.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(key)
+                            .contentType(mime)
+                            .contentLength(file.getSize())
+                            .build(),
+                    RequestBody.fromInputStream(in, file.getSize()));
         }
         return key;
     }
 
-    /** Stream an object from MinIO directly — used by the download proxy endpoint. */
-    public InputStream getObject(String storageKey) throws Exception {
-        return minioClient.getObject(GetObjectArgs.builder()
+    /** Stream an object from S3 — used by the download proxy endpoint. */
+    public InputStream getObject(String storageKey) {
+        return s3Client.getObject(GetObjectRequest.builder()
                 .bucket(bucket)
-                .object(storageKey)
+                .key(storageKey)
                 .build());
     }
 
-    /** Delete an object from MinIO by its storage key. */
-    public void delete(String storageKey) throws Exception {
-        minioClient.removeObject(RemoveObjectArgs.builder()
+    /** Delete an object from S3 by its storage key. */
+    public void delete(String storageKey) {
+        s3Client.deleteObject(DeleteObjectRequest.builder()
                 .bucket(bucket)
-                .object(storageKey)
+                .key(storageKey)
                 .build());
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
-
-    private void ensureBucketExists() throws Exception {
-        boolean exists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
-        if (!exists) {
-            minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
-        }
-    }
 
     private boolean isMimeAllowed(String mime) {
         if (ALLOWED_MIME_EXACT.contains(mime)) return true;
@@ -98,4 +95,5 @@ public class AttachmentService {
         return name.replaceAll("[/\\\\\\x00]", "_");
     }
 }
+
 

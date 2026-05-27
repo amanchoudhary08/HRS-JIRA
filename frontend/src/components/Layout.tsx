@@ -28,11 +28,13 @@ export function Layout({
   sidebar,
   backTo,
   backLabel = "← Back to projects",
+  mainStyle,
 }: {
   children: React.ReactNode;
   sidebar?: React.ReactNode;
   backTo?: string;
   backLabel?: string;
+  mainStyle?: React.CSSProperties;
 }) {
   const { user, logout, token } = useAuth();
   const navigate = useNavigate();
@@ -164,7 +166,7 @@ export function Layout({
                 </Link>
               </div>
             )}
-            <main className={cx.pageSidebar}>{children}</main>
+            <main className={cx.pageSidebar} style={mainStyle}>{children}</main>
           </div>
         </div>
       ) : (

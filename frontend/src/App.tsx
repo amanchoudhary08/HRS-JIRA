@@ -14,6 +14,7 @@ import { BoardPage } from "./pages/BoardPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { OAuth2CallbackPage } from "./pages/OAuth2CallbackPage";
 import { ApiReferencePage } from "./pages/ApiReferencePage";
+import { PipelinePage } from "./pages/PipelinePage";
 import "./main.css";
 
 function App() {
@@ -62,6 +63,14 @@ function App() {
             element={
               <Protected>
                 <ApiReferencePage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/projects/:id/pipeline"
+            element={
+              <Protected>
+                <PipelinePage />
               </Protected>
             }
           />
