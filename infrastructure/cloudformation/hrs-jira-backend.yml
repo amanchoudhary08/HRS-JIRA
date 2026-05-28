@@ -1,0 +1,953 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  HRS-JIRA Backend — Spring Boot API on ECS Fargate + RDS PostgreSQL.
+  Deploys a VPC, private/public subnets, ALB, ECS Fargate service, RDS, S3,
+  ECR repository, Secrets Manager secrets, and CloudWatch logging.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PARAMETERS
+# ─────────────────────────────────────────────────────────────────────────────
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging, development]
+    Description: Deployment environment name (used as a prefix on all resource names).
+
+  VpcCidr:
+    Type: String
+    Default: "10.0.0.0/16"
+    Description: CIDR block for the new VPC.
+
+  # ── Database ────────────────────────────────────────────────────────────────
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    AllowedValues: [db.t3.micro, db.t3.small, db.t3.medium, db.r6g.large]
+    Description: RDS instance type.
+
+  DBName:
+    Type: String
+    Default: taskflow
+    Description: PostgreSQL database name.
+
+  DBUsername:
+    Type: String
+    Default: taskflow
+    NoEcho: true
+    Description: Master username for RDS.
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: Master password for RDS (min 16 chars). Stored in Secrets Manager.
+
+  DBMultiAZ:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Enable Multi-AZ for RDS (set true for production HA).
+
+  # ── Application ─────────────────────────────────────────────────────────────
+  ContainerImage:
+    Type: String
+    Description: >
+      Full ECR image URI — e.g. 721906891174.dkr.ecr.eu-central-1.amazonaws.com/hrs-jira-api:latest.
+      Leave empty to use the ECR repo created by this stack (push after deploy).
+    Default: ""
+
+  TaskCpu:
+    Type: String
+    Default: "512"
+    AllowedValues: ["256", "512", "1024", "2048"]
+    Description: Fargate task vCPU units (256 = 0.25 vCPU).
+
+  TaskMemory:
+    Type: String
+    Default: "1024"
+    AllowedValues: ["512", "1024", "2048", "4096"]
+    Description: Fargate task memory in MiB.
+
+  DesiredCount:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 10
+    Description: Number of ECS tasks to run.
+
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: JWT signing secret (min 32 chars). Stored in Secrets Manager.
+
+  InternalSecret:
+    Type: String
+    NoEcho: true
+    Default: "hrs-taskflow-internal-secret-2024"
+    Description: Internal service-to-service secret. Stored in Secrets Manager.
+
+  GoogleClientId:
+    Type: String
+    Default: ""
+    Description: Google OAuth2 Client ID (leave empty to disable Google login).
+
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Google OAuth2 Client Secret. Stored in Secrets Manager.
+
+  FrontendUrl:
+    Type: String
+    Default: "https://d3ali6aogtd8tr.cloudfront.net"
+    Description: Public URL of the frontend (used for CORS and OAuth redirects).
+
+  GroqApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Groq API key for AI features (optional).
+
+  S3BucketName:
+    Type: String
+    Default: ""
+    Description: >
+      Name for the S3 attachments bucket. Leave empty to auto-generate
+      as hrs-jira-attachments-{AccountId}-{Region}.
+
+  CertificateArn:
+    Type: String
+    Default: ""
+    Description: >
+      ARN of an ACM certificate for HTTPS on the ALB. Leave empty to use
+      HTTP only (not recommended for production).
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONDITIONS
+# ─────────────────────────────────────────────────────────────────────────────
+Conditions:
+  UseCustomImage: !Not [!Equals [!Ref ContainerImage, ""]]
+  UseCustomBucketName: !Not [!Equals [!Ref S3BucketName, ""]]
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
+  IsProduction: !Equals [!Ref EnvironmentName, "production"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RESOURCES
+# ─────────────────────────────────────────────────────────────────────────────
+Resources:
+  # ══════════════════════════════════════════════════════════════════════════
+  # 1. ECR REPOSITORY
+  # ══════════════════════════════════════════════════════════════════════════
+
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "hrs-jira-api-${EnvironmentName}"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: MUTABLE
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+      Tags:
+        - Key: Project
+          Value: HRS-JIRA
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 2. VPC AND NETWORKING
+  # ══════════════════════════════════════════════════════════════════════════
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-vpc-${EnvironmentName}"
+        - Key: Project
+          Value: HRS-JIRA
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-igw-${EnvironmentName}"
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # ── Public subnets (ALB lives here) ───────────────────────────────────────
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [0, !Cidr [!Ref VpcCidr, 6, 8]]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-public-a-${EnvironmentName}"
+        - Key: Type
+          Value: Public
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [1, !Cidr [!Ref VpcCidr, 6, 8]]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-public-b-${EnvironmentName}"
+        - Key: Type
+          Value: Public
+
+  # ── Private subnets (ECS tasks + RDS live here) ───────────────────────────
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [2, !Cidr [!Ref VpcCidr, 6, 8]]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-private-a-${EnvironmentName}"
+        - Key: Type
+          Value: Private
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [3, !Cidr [!Ref VpcCidr, 6, 8]]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-private-b-${EnvironmentName}"
+        - Key: Type
+          Value: Private
+
+  # ── NAT Gateway (lets private subnets reach the internet) ─────────────────
+  NatEIPA:
+    Type: AWS::EC2::EIP
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGatewayA:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIPA.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-nat-a-${EnvironmentName}"
+
+  # ── Route tables ──────────────────────────────────────────────────────────
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-rt-public-${EnvironmentName}"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-rt-private-${EnvironmentName}"
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NatGatewayA
+
+  PrivateSubnetARouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetBRouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTable
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 3. SECURITY GROUPS
+  # ══════════════════════════════════════════════════════════════════════════
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP/HTTPS inbound to the ALB
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+          Description: HTTP from anywhere
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
+          Description: HTTPS from anywhere
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-alb-sg-${EnvironmentName}"
+
+  APISecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow traffic from ALB to ECS tasks on port 4000
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 4000
+          ToPort: 4000
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          Description: API traffic from ALB only
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-api-sg-${EnvironmentName}"
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow PostgreSQL from ECS tasks only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref APISecurityGroup
+          Description: PostgreSQL from API tasks only
+      Tags:
+        - Key: Name
+          Value: !Sub "hrs-jira-db-sg-${EnvironmentName}"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 4. SECRETS MANAGER
+  # ══════════════════════════════════════════════════════════════════════════
+
+  AppSecrets:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "hrs-jira/${EnvironmentName}/app"
+      Description: HRS-JIRA application secrets
+      SecretString: !Sub |
+        {
+          "JWT_SECRET": "${JwtSecret}",
+          "INTERNAL_SECRET": "${InternalSecret}",
+          "GOOGLE_CLIENT_ID": "${GoogleClientId}",
+          "GOOGLE_CLIENT_SECRET": "${GoogleClientSecret}",
+          "GROQ_API_KEY": "${GroqApiKey}"
+        }
+      Tags:
+        - Key: Project
+          Value: HRS-JIRA
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  DBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "hrs-jira/${EnvironmentName}/db"
+      Description: HRS-JIRA database credentials
+      SecretString: !Sub |
+        {
+          "username": "${DBUsername}",
+          "password": "${DBPassword}",
+          "dbname": "${DBName}"
+        }
+      Tags:
+        - Key: Project
+          Value: HRS-JIRA
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 5. RDS POSTGRESQL
+  # ══════════════════════════════════════════════════════════════════════════
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for HRS-JIRA RDS
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+      Tags:
+        - Key: Project
+          Value: HRS-JIRA
+
+  DBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: HRS-JIRA PostgreSQL 16 parameters
+      Family: postgres16
+      Parameters:
+        log_connections: "1"
+        log_disconnections: "1"
+        log_min_duration_statement: "1000" # Log queries > 1s
+        shared_preload_libraries: pg_stat_statements
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub "hrs-jira-db-${EnvironmentName}"
+      DBName: !Ref DBName
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: postgres
+      EngineVersion: "16.4"
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      AllocatedStorage: "20"
+      MaxAllocatedStorage: "100"
+      StorageType: gp3
+      StorageEncrypted: true
+      MultiAZ: !Ref DBMultiAZ
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      DBParameterGroupName: !Ref DBParameterGroup
+      BackupRetentionPeriod: !If [IsProduction, 7, 1]
+      DeletionProtection: !If [IsProduction, true, false]
+      EnablePerformanceInsights: true
+      PerformanceInsightsRetentionPeriod: 7
+      AutoMinorVersionUpgrade: true
+      Tags:
+        - Key: Project
+          Value: HRS-JIRA
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 6. S3 ATTACHMENTS BUCKET
+  # ══════════════════════════════════════════════════════════════════════════
+
+  AttachmentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !If
+        - UseCustomBucketName
+        - !Ref S3BucketName
+        - !Sub "hrs-jira-attachments-${AWS::AccountId}-${AWS::Region}"
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["*"]
+            AllowedMethods: [GET, PUT, POST, DELETE, HEAD]
+            AllowedOrigins:
+              - !Ref FrontendUrl
+            MaxAge: 3600
+      Tags:
+        - Key: Project
+          Value: HRS-JIRA
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 7. IAM ROLES
+  # ══════════════════════════════════════════════════════════════════════════
+
+  # Role assumed by the ECS agent to pull images and write logs
+  ECSExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "hrs-jira-ecs-execution-${EnvironmentName}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SecretsManagerRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref AppSecrets
+                  - !Ref DBSecret
+
+  # Role assumed by the running application container
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "hrs-jira-ecs-task-${EnvironmentName}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3AttachmentsAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                  - s3:HeadObject
+                Resource: !Sub "${AttachmentsBucket.Arn}/*"
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !GetAtt AttachmentsBucket.Arn
+        - PolicyName: SSMExecAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssmmessages:CreateControlChannel
+                  - ssmmessages:CreateDataChannel
+                  - ssmmessages:OpenControlChannel
+                  - ssmmessages:OpenDataChannel
+                Resource: "*"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 8. CLOUDWATCH LOG GROUP
+  # ══════════════════════════════════════════════════════════════════════════
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/hrs-jira-api-${EnvironmentName}"
+      RetentionInDays: !If [IsProduction, 30, 7]
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 9. APPLICATION LOAD BALANCER
+  # ══════════════════════════════════════════════════════════════════════════
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "hrs-jira-alb-${EnvironmentName}"
+      Type: application
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: "60"
+        - Key: deletion_protection.enabled
+          Value: !If [IsProduction, "true", "false"]
+      Tags:
+        - Key: Project
+          Value: HRS-JIRA
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "hrs-jira-tg-${EnvironmentName}"
+      Protocol: HTTP
+      Port: 4000
+      VpcId: !Ref VPC
+      TargetType: ip
+      HealthCheckPath: /actuator/health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "30"
+      Tags:
+        - Key: Project
+          Value: HRS-JIRA
+
+  HTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - !If
+          - HasCertificate
+          - Type: redirect
+            RedirectConfig:
+              Protocol: HTTPS
+              Port: "443"
+              StatusCode: HTTP_301
+          - Type: forward
+            TargetGroupArn: !Ref TargetGroup
+
+  HTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasCertificate
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Protocol: HTTPS
+      Port: 443
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 10. ECS CLUSTER AND SERVICE
+  # ══════════════════════════════════════════════════════════════════════════
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "hrs-jira-cluster-${EnvironmentName}"
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Weight: 1
+          Base: 1
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Tags:
+        - Key: Project
+          Value: HRS-JIRA
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "hrs-jira-api-${EnvironmentName}"
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: hrs-jira-api
+          Image: !If
+            - UseCustomImage
+            - !Ref ContainerImage
+            - !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/hrs-jira-api-${EnvironmentName}:latest"
+          Essential: true
+          PortMappings:
+            - ContainerPort: 4000
+              Protocol: tcp
+          Environment:
+            - Name: API_PORT
+              Value: "4000"
+            - Name: DATABASE_URL
+              Value: !Sub "jdbc:postgresql://${RDSInstance.Endpoint.Address}:5432/${DBName}"
+            - Name: POSTGRES_USER
+              Value: !Ref DBUsername
+            - Name: FRONTEND_URL
+              Value: !Ref FrontendUrl
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: S3_BUCKET
+              Value: !Ref AttachmentsBucket
+            - Name: SPRING_PROFILES_ACTIVE
+              Value: !Ref EnvironmentName
+          Secrets:
+            - Name: POSTGRES_PASSWORD
+              ValueFrom: !Sub "${DBSecret}:password::"
+            - Name: JWT_SECRET
+              ValueFrom: !Sub "${AppSecrets}:JWT_SECRET::"
+            - Name: INTERNAL_SECRET
+              ValueFrom: !Sub "${AppSecrets}:INTERNAL_SECRET::"
+            - Name: GOOGLE_CLIENT_ID
+              ValueFrom: !Sub "${AppSecrets}:GOOGLE_CLIENT_ID::"
+            - Name: GOOGLE_CLIENT_SECRET
+              ValueFrom: !Sub "${AppSecrets}:GOOGLE_CLIENT_SECRET::"
+            - Name: GROQ_API_KEY
+              ValueFrom: !Sub "${AppSecrets}:GROQ_API_KEY::"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: api
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - "wget -qO- http://localhost:4000/actuator/health || exit 1"
+            Interval: 30
+            Timeout: 10
+            Retries: 3
+            StartPeriod: 60
+          ReadonlyRootFilesystem: false
+          LinuxParameters:
+            InitProcessEnabled: true
+
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - HTTPListener
+      - RDSInstance
+    Properties:
+      ServiceName: !Sub "hrs-jira-api-${EnvironmentName}"
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      EnableExecuteCommand: true # Allows `aws ecs execute-command` (like SSH into container)
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateSubnetA
+            - !Ref PrivateSubnetB
+          SecurityGroups:
+            - !Ref APISecurityGroup
+      LoadBalancers:
+        - TargetGroupArn: !Ref TargetGroup
+          ContainerName: hrs-jira-api
+          ContainerPort: 4000
+      Tags:
+        - Key: Project
+          Value: HRS-JIRA
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 11. AUTO-SCALING
+  # ══════════════════════════════════════════════════════════════════════════
+
+  ScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MinCapacity: !Ref DesiredCount
+      MaxCapacity: 10
+      ResourceId: !Sub "service/${ECSCluster}/${ECSService.Name}"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+
+  ScaleOutPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "hrs-jira-cpu-scale-out-${EnvironmentName}"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        TargetValue: 70.0
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 60
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 12. CLOUDWATCH ALARMS
+  # ══════════════════════════════════════════════════════════════════════════
+
+  HighCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "hrs-jira-high-cpu-${EnvironmentName}"
+      AlarmDescription: "ECS task CPU > 85% for 5 minutes"
+      Namespace: AWS/ECS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ECSCluster
+        - Name: ServiceName
+          Value: !GetAtt ECSService.Name
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 85
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  RDSHighConnectionsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "hrs-jira-db-high-connections-${EnvironmentName}"
+      AlarmDescription: "RDS database connections > 80"
+      Namespace: AWS/RDS
+      MetricName: DatabaseConnections
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RDSInstance
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OUTPUTS
+# ─────────────────────────────────────────────────────────────────────────────
+Outputs:
+  APIURL:
+    Description: Public API endpoint via ALB
+    Value: !Sub
+      - "${Scheme}://${DNS}"
+      - Scheme: !If [HasCertificate, "https", "http"]
+        DNS: !GetAtt LoadBalancer.DNSName
+    Export:
+      Name: !Sub "hrs-jira-api-url-${EnvironmentName}"
+
+  ECRRepositoryURI:
+    Description: ECR repository URI — use this when pushing Docker images
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/hrs-jira-api-${EnvironmentName}"
+    Export:
+      Name: !Sub "hrs-jira-ecr-uri-${EnvironmentName}"
+
+  ECSClusterName:
+    Description: ECS cluster name
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub "hrs-jira-cluster-name-${EnvironmentName}"
+
+  ECSServiceName:
+    Description: ECS service name
+    Value: !GetAtt ECSService.Name
+    Export:
+      Name: !Sub "hrs-jira-service-name-${EnvironmentName}"
+
+  RDSEndpoint:
+    Description: RDS PostgreSQL endpoint
+    Value: !GetAtt RDSInstance.Endpoint.Address
+    Export:
+      Name: !Sub "hrs-jira-rds-endpoint-${EnvironmentName}"
+
+  S3BucketName:
+    Description: S3 attachments bucket name
+    Value: !Ref AttachmentsBucket
+    Export:
+      Name: !Sub "hrs-jira-s3-bucket-${EnvironmentName}"
+
+  AppSecretsArn:
+    Description: Secrets Manager ARN for application secrets
+    Value: !Ref AppSecrets
+    Export:
+      Name: !Sub "hrs-jira-app-secrets-arn-${EnvironmentName}"
+
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "hrs-jira-vpc-id-${EnvironmentName}"
+
+  PrivateSubnetIds:
+    Description: Private subnet IDs (comma-separated)
+    Value: !Sub "${PrivateSubnetA},${PrivateSubnetB}"
+    Export:
+      Name: !Sub "hrs-jira-private-subnets-${EnvironmentName}"
+
+  DeployCommand:
+    Description: "Command to push a new image and trigger a rolling deploy"
+    Value: !Sub |
+      # 1. Authenticate Docker to ECR
+      aws ecr get-login-password --region ${AWS::Region} --profile Developer-721906891174 | \
+        docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+
+      # 2. Build and push
+      docker build -t hrs-jira-api ./backend
+      docker tag hrs-jira-api:latest ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/hrs-jira-api-${EnvironmentName}:latest
+      docker push ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/hrs-jira-api-${EnvironmentName}:latest
+
+      # 3. Force new deployment
+      aws ecs update-service --cluster hrs-jira-cluster-${EnvironmentName} \
+        --service hrs-jira-api-${EnvironmentName} --force-new-deployment \
+        --region ${AWS::Region} --profile Developer-721906891174
