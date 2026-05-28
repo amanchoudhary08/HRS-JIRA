@@ -3,7 +3,7 @@ import { Field } from "./Field";
 import type { ProjectMember } from "../types";
 import type { User } from "../types";
 import * as cx from "../styles/classes";
-import { searchUsers } from "../api/client";
+import { searchUsers, request } from "../api/client";
 
 interface InviteMemberModalProps {
   projectId: string;
@@ -81,7 +81,6 @@ export function InviteMemberModal({
     setLoading(true);
     setError("");
     try {
-      const { request } = await import("../api/client");
       const member = await request<ProjectMember>(
         `/projects/${projectId}/members`,
         { method: "POST", token, body: { email: trimmed, role } },

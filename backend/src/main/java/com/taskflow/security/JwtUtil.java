@@ -49,6 +49,21 @@ public class JwtUtil {
                 .compact();
     }
 
+    /** Issues a short-lived (2 min) token intended only for SSE connections. */
+    public String generateSseToken(User user) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + 2 * 60_000L); // 2 minutes
+        return Jwts.builder()
+                .claim("user_id", user.getId().toString())
+                .claim("email", user.getEmail())
+                .claim("name", user.getName())
+                .claim("scope", "sse")
+                .issuedAt(now)
+                .expiration(expiry)
+                .signWith(key)
+                .compact();
+    }
+
     public Claims parseClaims(String token) {
         return Jwts.parser()
                 .verifyWith(key)

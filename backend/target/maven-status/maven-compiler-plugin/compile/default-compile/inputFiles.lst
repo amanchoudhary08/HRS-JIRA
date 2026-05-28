@@ -1,7 +1,10 @@
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/TaskflowApplication.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/config/AsyncConfig.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/AISuggestionController.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/ActivityController.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/AttachmentController.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/AuthController.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/AuthVerifyController.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/CommentController.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/GlobalExceptionHandler.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/controller/HealthController.java
@@ -27,6 +30,7 @@
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/dto/TaskDto.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/dto/TaskLinkDto.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/dto/UserDto.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/AISuggestion.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/ActivityEvent.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/Attachment.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/Comment.java
@@ -38,6 +42,9 @@
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/Task.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/TaskLink.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/entity/User.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/event/TaskCreatedEvent.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/listener/TaskAITriggerListener.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/AISuggestionRepository.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/ActivityEventRepository.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/AttachmentRepository.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/repository/CommentRepository.java
@@ -54,6 +61,7 @@
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/security/OAuth2SuccessHandler.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/security/RateLimitFilter.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/security/SecurityConfig.java
+/Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/service/AITriggerService.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/service/ActivityService.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/service/AttachmentService.java
 /Users/amanchoudhary/Desktop/HRS-JIRA/backend/src/main/java/com/taskflow/service/EmailService.java

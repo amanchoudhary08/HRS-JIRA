@@ -34,6 +34,14 @@ export async function request<T>(
 
 import type { Task, SearchResult, Label, Notification } from "../types";
 
+export function getSseToken(
+  token: string,
+): Promise<{ token: string; expiresIn: number }> {
+  return request<{ token: string; expiresIn: number }>("/auth/sse-token", {
+    token,
+  });
+}
+
 export function searchInProject(
   projectId: string,
   q: string,

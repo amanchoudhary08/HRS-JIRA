@@ -117,7 +117,7 @@ public class ProjectController {
         if (p == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "not found"));
         }
-        List<Task> tasks = taskRepo.findTop1000ByProjectIdOrderByCreatedAtDesc(id);
+        List<Task> tasks = taskRepo.findTop100ByProjectIdOrderByCreatedAtDesc(id);
         List<TaskDto> taskDtos = tasks.stream().map(TaskDto::from).toList();
         List<ProjectMemberDto> members = memberRepo.findByProjectIdWithUser(id)
                 .stream().map(ProjectMemberDto::from).toList();

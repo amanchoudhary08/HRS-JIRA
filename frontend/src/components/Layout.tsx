@@ -80,7 +80,7 @@ export function Layout({
   function handleTaskClick(task: Task, projectId: string) {
     setShowDropdown(false);
     setQuery("");
-    navigate(`/projects/${projectId}`);
+    navigate(`/projects/${projectId}?taskId=${task.id}`);
   }
 
   const totalHits = results.reduce((s, r) => s + r.tasks.length, 0);
@@ -166,7 +166,9 @@ export function Layout({
                 </Link>
               </div>
             )}
-            <main className={cx.pageSidebar} style={mainStyle}>{children}</main>
+            <main className={cx.pageSidebar} style={mainStyle}>
+              {children}
+            </main>
           </div>
         </div>
       ) : (

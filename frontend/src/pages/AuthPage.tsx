@@ -1,5 +1,5 @@
 import React, { FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Field } from "../components/Field";
 import { EyeIcon, EyeOffIcon } from "../components/icons";
@@ -8,6 +8,7 @@ import * as cx from "../styles/classes";
 export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const { login, register } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,6 +16,19 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
+  const handoffTarget = searchParams.get("handoff_target");
+
+  function buildHandoffUrl(target: string, token: string) {
+    const sep = target.includes("#") ? "&" : "#";
+    return `${target}${sep}taskflow_token=${encodeURIComponent(token)}`;
+  }
+
+  useEffect(() => {
+    if (mode !== "login" || !handoffTarget) return;
+    const token = localStorage.getItem("taskflow_token");
+    if (!token) return;
+    window.location.href = buildHandoffUrl(handoffTarget, token);
+  }, [mode, handoffTarget]);
 
   useEffect(() => {
     if (!error) return;
@@ -33,13 +47,30 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
       return setError("Name is required.");
     setLoading(true);
     try {
+      const redirect = searchParams.get("redirect");
+      const next = redirect || "/projects";
+      const goNext = () => {
+        if (/^https?:\/\//i.test(next)) {
+          window.location.href = next;
+        } else {
+          navigate(next);
+        }
+      };
+
       if (mode === "login") {
         await login(email, password);
-        navigate("/projects");
+        if (handoffTarget) {
+          const token = localStorage.getItem("taskflow_token");
+          if (token) {
+            window.location.href = buildHandoffUrl(handoffTarget, token);
+            return;
+          }
+        }
+        goNext();
       } else {
         await register(name, email, password);
         setRegistrationSuccess(true);
-        window.setTimeout(() => navigate("/projects"), 1200);
+        window.setTimeout(goNext, 1200);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");

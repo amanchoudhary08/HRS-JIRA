@@ -22,7 +22,7 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
 
     Page<Task> findByProjectIdAndStatusAndAssigneeId(UUID projectId, Task.TaskStatus status, UUID assigneeId, Pageable pageable);
 
-    List<Task> findTop1000ByProjectIdOrderByCreatedAtDesc(UUID projectId);
+    List<Task> findTop100ByProjectIdOrderByCreatedAtDesc(UUID projectId);
 
     @Query("SELECT t.status as status, COUNT(t) as count FROM Task t WHERE t.project.id = :projectId GROUP BY t.status")
     List<Object[]> countByStatusForProject(@Param("projectId") UUID projectId);
@@ -72,24 +72,24 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     @Query("SELECT COUNT(t) FROM Task t WHERE t.project.id = :projectId AND t.dueDate < :today AND t.status <> 'done'")
     long countOverdueForProject(@Param("projectId") UUID projectId, @Param("today") LocalDate today);
 
-    // Full-text search within a single project (case-insensitive LIKE, title + description)
-    @Query("""
-        SELECT t FROM Task t
-        WHERE t.project.id = :projectId
-          AND (LOWER(t.title) LIKE LOWER(CONCAT('%', :q, '%'))
-               OR LOWER(COALESCE(t.description, '')) LIKE LOWER(CONCAT('%', :q, '%')))
-        ORDER BY t.updatedAt DESC
-        """)
+    // Full-text search within a single project using PostgreSQL tsvector
+    @Query(value = """
+        SELECT * FROM tasks
+        WHERE project_id = :projectId
+          AND search_vector @@ plainto_tsquery('english', :q)
+        ORDER BY ts_rank(search_vector, plainto_tsquery('english', :q)) DESC,
+                 updated_at DESC
+        """, nativeQuery = true)
     List<Task> searchInProject(@Param("projectId") UUID projectId, @Param("q") String q, Pageable pageable);
 
-    // Full-text search across multiple projects
-    @Query("""
-        SELECT t FROM Task t
-        WHERE t.project.id IN :projectIds
-          AND (LOWER(t.title) LIKE LOWER(CONCAT('%', :q, '%'))
-               OR LOWER(COALESCE(t.description, '')) LIKE LOWER(CONCAT('%', :q, '%')))
-        ORDER BY t.updatedAt DESC
-        """)
+    // Full-text search across multiple projects using PostgreSQL tsvector
+    @Query(value = """
+        SELECT * FROM tasks
+        WHERE project_id IN (:projectIds)
+          AND search_vector @@ plainto_tsquery('english', :q)
+        ORDER BY ts_rank(search_vector, plainto_tsquery('english', :q)) DESC,
+                 updated_at DESC
+        """, nativeQuery = true)
     List<Task> searchAcrossProjects(@Param("projectIds") List<UUID> projectIds, @Param("q") String q, Pageable pageable);
 
     // Label filtering

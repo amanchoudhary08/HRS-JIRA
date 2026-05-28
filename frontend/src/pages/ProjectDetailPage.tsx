@@ -188,6 +188,24 @@ export function ProjectDetailPage() {
     void load();
   }, [id]);
 
+  // Open task modal when navigated to with ?taskId= (e.g. from global search)
+  useEffect(() => {
+    const taskId = searchParams.get("taskId");
+    if (!taskId || tasks.length === 0 || editing) return;
+    const task = tasks.find((t) => t.id === taskId);
+    if (task) {
+      setEditing(task);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("taskId");
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [tasks, searchParams]);
+
   useEffect(() => {
     if (!id) return;
     setTaskPage(1);

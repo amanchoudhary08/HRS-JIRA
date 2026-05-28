@@ -5,6 +5,7 @@ import {
   fetchNotifications,
   markAllNotificationsRead,
   markNotificationRead,
+  getSseToken,
 } from "../api/client";
 import { API_URL } from "../api/client";
 import type { Notification } from "../types";
@@ -116,30 +117,39 @@ export function NotificationBell({ token }: { token: string }) {
     return () => clearInterval(interval);
   }, [refreshCount]);
 
-  // SSE personal channel — live push
+  // SSE personal channel — live push (uses short-lived SSE-scoped token)
   useEffect(() => {
-    const es = new EventSource(
-      `${API_URL}/notifications/events?token=${encodeURIComponent(token)}`,
-    );
-    eventSourceRef.current = es;
+    let cancelled = false;
+    getSseToken(token)
+      .then(({ token: sseToken }) => {
+        if (cancelled) return;
+        const es = new EventSource(
+          `${API_URL}/notifications/events?token=${encodeURIComponent(sseToken)}`,
+        );
+        eventSourceRef.current = es;
 
-    es.addEventListener("notification", (e) => {
-      const data: Notification = JSON.parse((e as MessageEvent).data);
-      setUnread((prev) => prev + 1);
-      // Prepend to panel list if open
-      setNotifications((prev) => [data, ...prev]);
-      // Show toast
-      const msg = formatMessage(data);
-      const toastId = data.id;
-      setToasts((prev) => [...prev, { id: toastId, message: msg }]);
-    });
+        es.addEventListener("notification", (e) => {
+          const data: Notification = JSON.parse((e as MessageEvent).data);
+          setUnread((prev) => prev + 1);
+          // Prepend to panel list if open
+          setNotifications((prev) => [data, ...prev]);
+          // Show toast
+          const msg = formatMessage(data);
+          const toastId = data.id;
+          setToasts((prev) => [...prev, { id: toastId, message: msg }]);
+        });
 
-    es.onerror = () => {
-      es.close();
-    };
+        es.onerror = () => {
+          es.close();
+        };
+      })
+      .catch(() => {
+        // SSE token fetch failed — degrade gracefully (polling still works)
+      });
 
     return () => {
-      es.close();
+      cancelled = true;
+      eventSourceRef.current?.close();
     };
   }, [token]);
 

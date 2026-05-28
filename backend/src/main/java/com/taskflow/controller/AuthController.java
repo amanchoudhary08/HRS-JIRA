@@ -76,6 +76,12 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("token", token, "user", UserDto.from(user)));
     }
 
+    @GetMapping("/auth/sse-token")
+    public ResponseEntity<Map<String, Object>> sseToken(@AuthenticationPrincipal User user) {
+        String token = jwtUtil.generateSseToken(user);
+        return ResponseEntity.ok(Map.of("token", token, "expiresIn", 120));
+    }
+
     @GetMapping("/users")
     public ResponseEntity<Map<String, Object>> listUsers(@AuthenticationPrincipal User currentUser) {
         List<UserDto> users = userRepo.findAll().stream()

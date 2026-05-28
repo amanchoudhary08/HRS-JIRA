@@ -8,15 +8,6 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "./context/AuthContext";
-import { AILayout } from "./pages/ai/AILayout";
-import AgentsPage from "./pages/ai/AgentsPage";
-import ExecutionDetailPage from "./pages/ai/ExecutionDetailPage";
-import CollaboratePage from "./pages/ai/CollaboratePage";
-import SkillsPage from "./pages/ai/SkillsPage";
-import SkillGeneratePage from "./pages/ai/SkillGeneratePage";
-import PersonasPage from "./pages/ai/PersonasPage";
-import PersonaDetailPage from "./pages/ai/PersonaDetailPage";
-import AIAnalyticsPage from "./pages/ai/AIAnalyticsPage";
 import { Protected } from "./components/Protected";
 import { AuthPage } from "./pages/AuthPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
@@ -98,30 +89,6 @@ function App() {
                 </Protected>
               }
             />
-            <Route
-              path="/ai"
-              element={
-                <Protected>
-                  <AILayout />
-                </Protected>
-              }
-            >
-              <Route index element={<Navigate to="agents" replace />} />
-              <Route path="agents" element={<AgentsPage />} />
-              <Route
-                path="agents/executions/:id"
-                element={<ExecutionDetailPage />}
-              />
-              <Route path="collaborate" element={<CollaboratePage />} />
-              <Route path="skills" element={<SkillsPage />} />
-              <Route
-                path="skills/generate/:personaId"
-                element={<SkillGeneratePage />}
-              />
-              <Route path="personas" element={<PersonasPage />} />
-              <Route path="personas/:slug" element={<PersonaDetailPage />} />
-              <Route path="analytics" element={<AIAnalyticsPage />} />
-            </Route>
           </Routes>
         </Router>
       </AuthProvider>
