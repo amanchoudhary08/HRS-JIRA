@@ -284,3 +284,30 @@ export function searchUsers(
     { token },
   );
 }
+
+// ─── AI Suggestions ───────────────────────────────────────────────────────────
+
+import type { AISuggestion } from "../types";
+
+export function fetchAISuggestions(
+  projectId: string,
+  taskId: string,
+  token: string,
+): Promise<{ suggestions: AISuggestion[] }> {
+  return request<{ suggestions: AISuggestion[] }>(
+    `/projects/${projectId}/tasks/${taskId}/ai-suggestions`,
+    { token },
+  );
+}
+
+export function acceptAISuggestion(
+  projectId: string,
+  taskId: string,
+  suggestionId: string,
+  token: string,
+): Promise<AISuggestion> {
+  return request<AISuggestion>(
+    `/projects/${projectId}/tasks/${taskId}/ai-suggestions/${suggestionId}/accept`,
+    { method: "PATCH", token },
+  );
+}

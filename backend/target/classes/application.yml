@@ -66,8 +66,8 @@ app:
     region: ${AWS_REGION:us-east-1}
     bucket: ${S3_BUCKET:taskflow-attachments}
   ai:
-    url: ${AI_URL:http://localhost:8000}
-    internal-secret: ${INTERNAL_SECRET}
+    groq-api-key: ${GROQ_API_KEY:}
+    model: ${AI_MODEL:llama-3.3-70b-versatile}
 
 logging:
   level:

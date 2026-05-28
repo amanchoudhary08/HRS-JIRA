@@ -14,6 +14,8 @@ import {
   fetchLabels,
   attachLabel,
   detachLabel,
+  fetchAISuggestions,
+  acceptAISuggestion,
 } from "../api/client";
 import { AttachmentZone } from "./AttachmentZone";
 import { Field } from "./Field";
@@ -28,6 +30,7 @@ import type {
   Task,
   TaskLink,
   User,
+  AISuggestion,
 } from "../types";
 
 function timeAgo(iso: string): string {
@@ -144,6 +147,11 @@ export function TaskModal({
   const [linkType, setLinkType] = useState<TaskLink["link_type"]>("relates_to");
   const [savingLink, setSavingLink] = useState(false);
 
+  // AI suggestions state
+  const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [showAIPanel, setShowAIPanel] = useState(false);
+
   // Sync all fields whenever the task prop changes
   useEffect(() => {
     setTitle(task?.title ?? "");
@@ -168,6 +176,7 @@ export function TaskModal({
     setShowLinkForm(false);
     setLinkTargetSearch("");
     setLinkSearchResults([]);
+    setAiSuggestions([]);
     // Reset label selections
     setSelectedLabelIds(task?.labels?.map((l) => l.id) ?? []);
   }, [task?.id]);
@@ -220,6 +229,13 @@ export function TaskModal({
       .then((data) => setLinks(data.links))
       .catch(() => setLinks([]))
       .finally(() => setLoadingLinks(false));
+
+    // Load AI suggestions
+    setLoadingAI(true);
+    fetchAISuggestions(projectId, task.id, token ?? "")
+      .then((data) => setAiSuggestions(data.suggestions))
+      .catch(() => setAiSuggestions([]))
+      .finally(() => setLoadingAI(false));
   }, [task?.id]);
 
   // Handle live SSE comment events
@@ -499,12 +515,176 @@ export function TaskModal({
             {task ? "Task detail" : "New task"}
           </h2>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {task && (
+              <button
+                className={showAIPanel ? cx.btn : cx.btnSecondary}
+                type="button"
+                onClick={() => setShowAIPanel((v) => !v)}
+              >
+                ✨ AI Suggestion
+              </button>
+            )}
             <button className={cx.btnSecondary} type="button" onClick={onClose}>
               Close
             </button>
           </div>
         </div>
         <div className={cx.drawerBody}>
+          {/* ── AI Suggestion Panel ───────────────────────────────────── */}
+          {task && showAIPanel && (
+            <div
+              style={{
+                border: "2px solid var(--color-brand)",
+                borderRadius: 10,
+                padding: "14px 16px",
+                background: "var(--color-bg-card)",
+                boxShadow: "0 0 0 4px rgba(31,91,69,0.10)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  fontWeight: 700,
+                  fontSize: "0.95rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  color: "var(--color-brand)",
+                }}
+              >
+                ✨ AI Triage Suggestion
+              </p>
+              {loadingAI ? (
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "0.85rem",
+                    color: "var(--color-text-muted)",
+                  }}
+                >
+                  Analyzing task...
+                </p>
+              ) : aiSuggestions.length === 0 ? (
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "0.85rem",
+                    color: "var(--color-text-muted)",
+                  }}
+                >
+                  No AI suggestions yet. They appear a few seconds after task
+                  creation.
+                </p>
+              ) : (
+                aiSuggestions.slice(0, 1).map((s) => (
+                  <div
+                    key={s.id}
+                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                  >
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      <span
+                        style={{
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          padding: "3px 10px",
+                          borderRadius: 20,
+                          background: "var(--color-pill-bg)",
+                          color: "var(--color-pill-color)",
+                        }}
+                      >
+                        {s.content.priority} priority
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          padding: "3px 10px",
+                          borderRadius: 20,
+                          background: "var(--color-bg)",
+                          border: "1px solid var(--color-border)",
+                        }}
+                      >
+                        {s.content.story_points} pts
+                      </span>
+                      {s.content.labels.map((l) => (
+                        <span
+                          key={l}
+                          style={{
+                            fontSize: "0.8rem",
+                            padding: "3px 10px",
+                            borderRadius: 20,
+                            background: "var(--color-bg)",
+                            border: "1px solid var(--color-border)",
+                          }}
+                        >
+                          {l}
+                        </span>
+                      ))}
+                    </div>
+                    {s.content.reasoning && (
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: "0.83rem",
+                          color: "var(--color-text-muted)",
+                          fontStyle: "italic",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {s.content.reasoning}
+                      </p>
+                    )}
+                    {!s.accepted ? (
+                      <button
+                        type="button"
+                        className={cx.btn}
+                        style={{
+                          fontSize: "0.82rem",
+                          padding: "5px 14px",
+                          alignSelf: "flex-start",
+                        }}
+                        onClick={async () => {
+                          try {
+                            await acceptAISuggestion(
+                              projectId,
+                              task.id,
+                              s.id,
+                              token ?? "",
+                            );
+                            setAiSuggestions((prev) =>
+                              prev.map((x) =>
+                                x.id === s.id ? { ...x, accepted: true } : x,
+                              ),
+                            );
+                            setPriority(s.content.priority as Task["priority"]);
+                            setStoryPoints(String(s.content.story_points));
+                            setShowAIPanel(false);
+                          } catch {
+                            setError("Could not apply suggestion");
+                          }
+                        }}
+                      >
+                        Apply suggestions
+                      </button>
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: "0.82rem",
+                          color: "var(--color-text-muted)",
+                        }}
+                      >
+                        ✓ Already applied
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
           {error && (
             <div
               className={cx.errorBox}

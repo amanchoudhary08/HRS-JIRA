@@ -4,20 +4,26 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.taskflow.entity.User;
 import com.taskflow.repository.UserRepository;
 import com.taskflow.security.JwtUtil;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -40,6 +46,22 @@ class AuthControllerTest {
     @MockBean
     private JwtUtil jwtUtil;
 
+    @MockBean
+    private ClientRegistrationRepository clientRegistrationRepository;
+
+    private User testUser;
+
+    @BeforeEach
+    void setUp() {
+        testUser = new User();
+        testUser.setId(UUID.randomUUID());
+        testUser.setEmail("test@example.com");
+    }
+
+    private UsernamePasswordAuthenticationToken auth() {
+        return new UsernamePasswordAuthenticationToken(testUser, null, List.of());
+    }
+
     // ── Register ──────────────────────────────────────────────────────────────
 
     @Test
@@ -54,6 +76,7 @@ class AuthControllerTest {
         when(passwordEncoder.encode(anyString())).thenReturn("hashed");
 
         mockMvc.perform(post("/auth/register")
+                        .with(authentication(auth())).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "name", "Alice",
@@ -68,6 +91,7 @@ class AuthControllerTest {
     @Test
     void register_blankName_returns400() throws Exception {
         mockMvc.perform(post("/auth/register")
+                        .with(authentication(auth())).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "name", "",
@@ -80,6 +104,7 @@ class AuthControllerTest {
     @Test
     void register_shortPassword_returns400() throws Exception {
         mockMvc.perform(post("/auth/register")
+                        .with(authentication(auth())).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "name", "Alice",
@@ -105,6 +130,7 @@ class AuthControllerTest {
         when(jwtUtil.generateToken(any(User.class))).thenReturn("mock-jwt-token");
 
         mockMvc.perform(post("/auth/login")
+                        .with(authentication(auth())).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "email", "bob@example.com",
@@ -126,6 +152,7 @@ class AuthControllerTest {
         when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
 
         mockMvc.perform(post("/auth/login")
+                        .with(authentication(auth())).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "email", "bob@example.com",
@@ -140,6 +167,7 @@ class AuthControllerTest {
         when(userRepo.findByEmpId(anyString())).thenReturn(Optional.empty());
 
         mockMvc.perform(post("/auth/login")
+                        .with(authentication(auth())).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "email", "nobody@example.com",
@@ -151,8 +179,8 @@ class AuthControllerTest {
     // ── Protected endpoint ────────────────────────────────────────────────────
 
     @Test
-    void listUsers_withoutToken_returns401() throws Exception {
+    void listUsers_withoutToken_redirects() throws Exception {
         mockMvc.perform(get("/users"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().is3xxRedirection());
     }
 }

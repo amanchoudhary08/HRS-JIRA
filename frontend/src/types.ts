@@ -1,5 +1,18 @@
 export type User = { id: string; name: string; email: string };
 
+export type AISuggestion = {
+  id: string;
+  type: string;
+  content: {
+    priority: string;
+    labels: string[];
+    story_points: number;
+    reasoning: string;
+  };
+  accepted: boolean;
+  created_at: string;
+};
+
 export type Label = {
   id: string;
   name: string;
