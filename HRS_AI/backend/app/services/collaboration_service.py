@@ -28,7 +28,7 @@ async def _run_bedrock_stream(invoke_fn) -> AsyncGenerator[str, None]:
     """Run a boto3 invoke_model_with_response_stream call in a thread pool
     and yield text chunks back to the caller via an asyncio Queue.
     This keeps the event loop free so SSE events flush in real time."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue(maxsize=512)
 
     def _worker():
@@ -257,8 +257,11 @@ async def _stream_agent_turn(
     )
 
     messages = [{"role": "user", "content": user_message}]
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     accumulated_output = ""
+
+    # Tool-use rounds use Haiku (faster + cheaper); final stream uses Sonnet
+    haiku_model = settings.BEDROCK_MODEL_HAIKU45 or settings.BEDROCK_MODEL_ID
 
     # Reduced to 5 tool-use rounds (was 10)
     for _round in range(5):
@@ -273,7 +276,7 @@ async def _stream_agent_turn(
 
         def _invoke_sync(b=body):
             client = get_bedrock_client()
-            resp = client.invoke_model(modelId=settings.BEDROCK_MODEL_ID, body=b)
+            resp = client.invoke_model(modelId=haiku_model, body=b)
             return json.loads(resp["body"].read())
 
         try:

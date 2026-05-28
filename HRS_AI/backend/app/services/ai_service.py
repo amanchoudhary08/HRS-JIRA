@@ -23,6 +23,44 @@ def get_bedrock_client():
 
 
 # ---------------------------------------------------------------------------
+# Non-blocking Bedrock streaming helper (mirrors collaboration_service pattern)
+# ---------------------------------------------------------------------------
+
+async def _run_bedrock_stream(invoke_fn) -> AsyncGenerator[str, None]:
+    """Run invoke_model_with_response_stream in a thread pool, yield chunks via Queue."""
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=512)
+
+    def _worker():
+        try:
+            resp = invoke_fn()
+            body = resp.get("body")
+            if body:
+                for ev in body:
+                    raw = ev.get("chunk")
+                    if raw:
+                        data = json.loads(raw["bytes"].decode())
+                        if data.get("type") == "content_block_delta":
+                            text = data.get("delta", {}).get("text", "")
+                            if text:
+                                loop.call_soon_threadsafe(queue.put_nowait, text)
+        except Exception as exc:
+            loop.call_soon_threadsafe(queue.put_nowait, f"\n[stream error: {exc}]")
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, None)
+
+    fut = loop.run_in_executor(None, _worker)
+    try:
+        while True:
+            text = await queue.get()
+            if text is None:
+                break
+            yield text
+    finally:
+        await fut
+
+
+# ---------------------------------------------------------------------------
 # generate_skill_file_stream
 # ---------------------------------------------------------------------------
 
@@ -70,29 +108,16 @@ async def generate_skill_file_stream(
         "messages": [{"role": "user", "content": user_message}],
     })
 
-    loop = asyncio.get_event_loop()
-
     def _invoke():
         client = get_bedrock_client()
-        response = client.invoke_model_with_response_stream(
+        return client.invoke_model_with_response_stream(
             modelId=settings.BEDROCK_MODEL_ID,
             body=body,
         )
-        return response
 
     try:
-        response = await loop.run_in_executor(None, _invoke)
-        stream = response.get("body")
-        if stream:
-            for event in stream:
-                chunk = event.get("chunk")
-                if chunk:
-                    chunk_data = json.loads(chunk["bytes"].decode("utf-8"))
-                    if chunk_data.get("type") == "content_block_delta":
-                        delta = chunk_data.get("delta", {})
-                        text = delta.get("text", "")
-                        if text:
-                            yield text
+        async for text in _run_bedrock_stream(_invoke):
+            yield text
     except Exception as exc:
         yield f"\n\n[Error generating skill file: {exc}]"
 

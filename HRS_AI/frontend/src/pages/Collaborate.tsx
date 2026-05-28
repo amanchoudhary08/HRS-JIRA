@@ -570,8 +570,42 @@ function SessionForm({ initial, onDone, onCancel }: {
 
   const inp = 'w-full rounded-xl text-sm placeholder:text-slate-600 text-slate-200 focus:outline-none transition-all px-3.5 py-2.5 bg-white/[0.04] border border-white/[0.07] focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20'
 
+  const PROMPT_CHIPS = [
+    {
+      label: '🏨 EMEA Hotel Contracts',
+      title: 'EMEA Hotel Contract Q3 2026',
+      problem:
+        'Analyse our Q3 2026 EMEA hotel contract renewals. Review current rates, identify negotiation opportunities, check compliance requirements, and generate a negotiation brief with talking points for our top 5 hotel chains.',
+    },
+    {
+      label: '🔍 Supplier Onboarding',
+      title: 'Supplier Onboarding Review',
+      problem:
+        'Review our hotel supplier onboarding process for new properties in the APAC region. Check compliance documentation, assess rate competitiveness, and recommend which suppliers to prioritise for Q4 expansion.',
+    },
+    {
+      label: '💰 Cost Optimisation',
+      title: 'Cost Optimisation Analysis',
+      problem:
+        'Analyse hotel spend across all markets for Q2 2026. Identify overpayment vs benchmark rates, flag contract non-compliance, and generate a savings opportunity report with specific negotiation actions.',
+    },
+  ]
+
   return (
     <form onSubmit={submit} className="space-y-3">
+      {/* Pre-filled prompt chips */}
+      <div className="flex flex-wrap gap-1.5">
+        {PROMPT_CHIPS.map(chip => (
+          <button
+            key={chip.label}
+            type="button"
+            onClick={() => { setProblem(chip.problem); setTitle(chip.title) }}
+            className="text-[11px] px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08] text-slate-400 hover:text-slate-200 hover:border-indigo-500/40 hover:bg-indigo-500/10 transition-all"
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
       <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Session title" className={inp} />
       <textarea value={problem} onChange={e => setProblem(e.target.value)} rows={5} required
         placeholder="Describe what you want to build or solve…"

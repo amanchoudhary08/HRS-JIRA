@@ -1,0 +1,451 @@
+1. Why AI-Assisted Coding Contest? 
+Strategic Motivation 
+Embed AI knowledge and hands-on experience into every team 
+Accelerate productivity by normalizing AI-assisted workflows 
+Expected Outcomes 
+Engineers gain practical AI tool proficiency (Copilot, AWS Bedrock, Claude, etc.) 
+Identify AI champions and best practices 
+Tangible artifacts (code, demos) to showcase 
+2. Contest Overview 
+Date 
+	
+Teams 
+	
+Duration 
+	
+Prize Pool 
+
+
+28th-May 
+09:30 - 18:00 
+	
+6-8 teams 
+3-6 members each 
+	
+5+ hours coding 
+1 hour ceremony 
+	
+Winner (1st place):  
+Runner-up (2nd place): 
+Third place: 
+ 
+Allowed AI Tools 
+GitHub Copilot 
+HRS Q 
+AWS Bedrock 
+Claude Code  
+Others  
+ 
+ 
+3. Event Timeline: Wednesday, 28 May 2026 
+Time 
+	
+Activity 
+
+
+Time 
+	
+Activity 
+
+
+09:30 
+	
+Opening Ceremony:  
+Vibhu’s speech. 
+
+10:00 
+	
+Coding Begins: Phase 1 - Core Features 
+
+
+13:00 
+	
+Lunch Break (provided) 
+
+
+13:30 
+	
+Coding Resumes: Phase 2 - Advanced Features & Polish 
+
+
+15:30 
+	
+Code Freeze & Submission 
+
+
+16 :00 
+	
+Team Presentations (15 mins per team) 
+
+
+18:00 
+	
+Champion Ceremony  
+4. Problem Statement: HRS Procurement Intelligence Agents  
+Challenge: "Build an AI-Powered Procurement Intelligence Platform for Corporate Hotel Negotiation & Supplier Submission" 
+ 
+Design and implement a web-based platform where specialized AI agents accelerate and automate the two highest-friction points in the HRS corporate procurement cycle:  
+(1) preparing consultants for local hotel negotiations after rebid flagging, and (2) supporting hotels through the bid submission process inside the supplier application. Think "AI co-pilot for both sides of the negotiation table" — one agent fleet arms HRS consultants with data-driven leverage, while another agent fleet ensures hotels submit compliant bids without needing human support. The agents retrieve data from multiple systems in parallel, reason over RFP context, and act autonomously within defined guardrails. 
+Tier 1: Must Have 
+Negotiation Brief Agent — when Copilot flags a hotel for local negotiation, the agent auto-assembles a pre-call brief containing: bid vs. target gap (absolute + %), client room nights delivered last year + YoY trend, NDS & buyer/seller market classification, comparable hotel acceptances in same destination, stickiness score, HPO walk-away alternative 
+Agent Creator (name, model, system prompt, data domain assignment, memory config) 
+Model Selector (GPT, Claude, Gemini, DeepSeek) 
+Prompt Editor with Versioning — configure and iterate on agent system prompts 
+Agent Chat — query any agent conversationally: "What leverage do we have with Hotel X in Munich?" 
+Agent Registry (list/grid with status: active, syncing, idle, error) 
+ 
+Tier 2: Should Have 
+Supplier Question Resolution Agent — embedded in supplier app; answers hotel questions ("What is LRA?", "Why is my rate field blocked?") by retrieving from RFP briefing doc, GBTA requirements, and hotel-level eRFP instructions simultaneously 
+Pre-Submission Compliance Agent — scans completed bids against hotel-level instructions before submit: validates rate type, breakfast structure, mandatory GBTA fields; surfaces specific errors with fix instructions 
+Deadline Urgency Agent — monitors submission progress per hotel against 2-week window; proactively reaches out at day 7 and day 12 with targeted status (incomplete fields, outstanding issues, direct link back) 
+MCP tool/resource assignment per agent (e.g., hpo_lookup, pe_data, datahub_query, omc_master, erfp_config, briefing_doc_retriever) 
+Talking Points Generator — produces 3–4 data-grounded negotiation talking points per hotel (not a script, but key facts to lead with) 
+Post-Call Outcome Logger — consultant logs result in 3 clicks; agent updates negotiation queue, flags counter-offers within acceptable range, marks destination resolved/pending 
+Consultant Dashboard — prioritized negotiation queue ranked by leverage score + savings potential 
+ 
+ 
+Tier 3: Wow Factor 
+A2A Multi-Agent Pipeline: Negotiation Brief Agent retrieves data → Talking Points Agent generates leverage arguments → Post-Call Agent logs outcome → Queue Manager Agent re-prioritizes remaining hotels 
+Supplier-Side A2A Pipeline: Question Agent resolves query → Compliance Agent validates → Urgency Agent monitors → Operations Dashboard Agent aggregates ticket deflection metrics 
+Parallel data retrieval from HPO, PE, DataHub, OMC master table — brief assembled in seconds vs. hours manually 
+Shared Knowledge Base across supplier agents: RFP config, briefing document, hotel-level instruction set — single source of truth, three agents consume it independently 
+Predictive acceptance modeling — agent predicts likelihood a hotel will accept at target rate based on historical patterns, market conditions, and stickiness 
+Live negotiation simulation — consultant can "rehearse" against an agent playing the hotel's likely objections 
+Expose agents as MCP server for use inside Claude / ChatGPT by consultants in the field 
+Cost & savings analytics — track realized savings per agent-assisted negotiation vs. baseline 
+Challenge Design Principles: The platform must test both engineering skills (data integration, RAG pipelines, real-time personalization) and effective AI utilization (MCP protocol, agent orchestration, A2A patterns). The traveler intelligence domain provides rich data integration challenges and compelling personalization demos. 
+5. Agent Integration: From Platform to Product 
+Every intelligence agent you create gets a deployable endpoint. The power is in embedding agents at the exact moment a human needs them — not in a separate tool they must context-switch to. A Negotiation Brief Agent fires the instant Copilot flags a hotel; a Compliance Agent triggers the moment a hotel clicks pre-submit; a Question Resolution Agent responds in the supplier app chat without a single support ticket being raised. One agent, many surfaces — deployed where the user already works. 
+Surface 
+	
+Integration Method 
+	
+Use Case 
+
+
+Copilot Cockpit 
+	
+Native agent integration via API 
+	
+Copilot flags hotel for local nego → Brief Agent auto-fires, brief appears in consultant’s queue 
+
+
+Supplier Application 
+	
+Embedded chat widget (iframe/JS SDK) 
+	
+Hotel typing a question mid-submission gets instant contextual answer — zero support tickets 
+
+
+Consultant Portal 
+	
+Dashboard overlay + REST API 
+	
+Prioritized negotiation queue with pre-built briefs, one-click to start call prep 
+
+
+eRFP System 
+	
+Webhook on submission events 
+	
+Compliance Agent triggers on pre-submit, blocks non-compliant bids with actionable fix guidance 
+
+
+Slack / MS Teams 
+	
+Bot integration via webhook/API 
+	
+“@nego-intel Give me the brief for Marriott Frankfurt” — consultant gets data in channel 
+
+
+ChatGPT / Claude 
+	
+MCP server exposure 
+	
+Ad-hoc procurement intelligence queries inside LLM platforms for field consultants 
+
+
+Email / Notifications 
+	
+Outbound API + notification service 
+	
+Deadline Urgency Agent sends targeted reminders to hotels at day 7 and day 12 
+
+
+Mobile App 
+	
+REST/WebSocket SDK 
+	
+Consultant reviews brief on phone before walking into negotiation meeting 
+6. Tasks: Units of Work for Intelligence Agents 
+A task is a procurement job assigned to one or more agents to execute autonomously. Think "Jira for procurement intelligence" — create it, assign it, watch the agent retrieve data, reason, and deliver results. 
+Task Fields 
+Title — what needs to be done 
+Description — scope, data sources required, output format 
+Priority — High / Medium / Low (auto-calculated from savings potential + deadline proximity) 
+Assigned Agent(s) — which agent(s) work on it 
+Status — Created → Retrieving Data → Analyzing → Brief Ready → Delivered / Resolved 
+Output — agent's deliverable (negotiation brief, compliance report, talking points, submission status) 
+Execution Log — step-by-step trace of data sources queried, reasoning steps, and tool calls 
+Example Tasks 
+Task 
+	
+Assigned To 
+
+
+""Assemble pre-call brief for Marriott Munich — bid gap is 18%, 4200 room nights, buyer's market" 
+	
+Negotiation Brief Agent 
+
+
+""Generate talking points for top 10 flagged hotels in London sorted by savings potential" 
+	
+Brief Agent → Talking Points Agent 
+
+
+""Scan all pending hotel submissions for RFP-2026-Q3 and flag non-compliant bids before deadline" 
+	
+Pre-Submission Compliance Agent 
+
+
+""Answer: 'What is LRA and do I need to include breakfast?' for Hotel Adlon in context of RFP #4471" 
+	
+Question Resolution Agent 
+
+
+Alert all hotels that opened RFP but haven't submitted — day 12, deadline in 48 hours" 
+	
+Deadline Urgency Agent 
+
+
+"Post-call update: Hotel accepted at target +3%, log outcome and remove from queue" 
+	
+Post-Call Agent → Queue Manager Agent 
+Live Execution: Watch the Negotiation Brief Agent work in real-time — see it query HPO for walk-away alternatives, pull room night data from DataHub, fetch NDS classification from PE, retrieve comparable acceptances from OMC master, then synthesize a consultant-ready brief with talking points — all streaming in within seconds. 
+7. Ideal Demo Flow: What Judges Want to See 
+Step 
+	
+What You Show on Screen 
+	
+What It Proves 
+
+
+1. Create Agent 
+	
+Platform → “New Agent” → name: Negotiation Brief Agent, model: Claude Sonnet, prompt: “You assemble data-driven pre-call briefs for HRS procurement consultants negotiating with hotels...”, domain: Procurement → Save 
+	
+Agent CRUD, multi-model, prompt editor 
+
+
+2. Assign MCP Tools 
+	
+Agent config → toggle on hpo_lookup, datahub_query, pe_nds_classification, omc_master, erfp_config → bind resource: hotel negotiation schema → Save 
+	
+MCP integration, tools & resources per agent 
+
+
+3. Embed in Consultant Portal 
+	
+Embed agent in consultant dashboard → type “Show me the brief for Marriott Munich” → agent pulls bid gap, room nights, NDS, comparables, stickiness → returns consultant-ready brief with talking points 
+	
+Embeddable endpoints, real-time data retrieval from multiple systems 
+
+
+4. Create Task 
+	
+Task Board → “Assemble pre-call briefs for top 10 flagged hotels in London, sorted by savings potential” → assign to Negotiation Brief Agent → Execute → watch agent query HPO, DataHub, PE in parallel → briefs stream in 
+	
+Task system, async execution, parallel data retrieval, live execution log 
+
+
+5. Agents Collaborate 
+	
+Negotiation Brief Agent assembles data → passes to Talking Points Agent → generates leverage arguments → Post-Call Agent logs outcome after consultant call → Queue Manager Agent re-prioritizes remaining hotels → all via A2A 
+	
+A2A multi-agent procurement pipeline, end-to-end negotiation workflow 
+Progression: Solo Negotiation Brief Agent (Tier 1) → Agent + MCP Data Tools from HPO/PE/DataHub (Tier 2) → Agent Embedded in Consultant Portal (Tier 2) → Agent Executing Procurement Tasks (Tier 2) → Full Multi-Agent Negotiation Pipeline with A2A (Tier 3) 
+8. Success Criteria: What Winning Looks Like 
+Criteria 
+	
+Description 
+
+
+Functionality & AI Utilization (50%) 
+	
+Agent CRUD, MCP tools for data integration, task system, embeddable endpoints, A2A procurement pipeline, multi-model support, RAG-based memory — working end-to-end 
+
+
+Code Quality and Security (10%) 
+(Production Readiness) 
+	
+Extensible agent runtime, clean API, RAG pipeline architecture, real-time WebSocket, documentation 
+
+
+Presentation & Demo (10%) 
+	
+Live: create agent → assign MCP → embed in portal → task → agents deliver procurement briefs collaboratively 
+
+
+Creativity & Innovation or Business (30%) 
+	
+Predictive acceptance modeling, parallel data retrieval, live negotiation simulation, cross-system insights, novel A2A patterns 
+ 
+9. Detailed Scoring Rubric 
+Criteria 
+	
+Excellent (Full Marks) 
+	
+Good (Partial) 
+	
+Needs Work (Minimal) 
+
+
+Functionality & AI Utilization 
+(50 pts) 
+	
+Full agent CRUD + MCP data tools integrated + tasks + A2A procurement pipeline + multi-model + RAG-based memory; agents execute end-to-end with parallel data retrieval 
+	
+Agent CRUD + chat works; partial MCP or tasks; basic LLM usage per agent; some tool integration 
+	
+Can create agents but no real data integration, MCP, or agent orchestration; wrapper over single LLM call 
+
+
+Code Quality 
+(10 pts) 
+	
+Clean API; RAG pipeline; extensible runtime; real-time WebSocket; well-documented 
+	
+Reasonable REST API; basic frontend separation 
+	
+Monolith; hard-coded; no separation 
+
+
+Presentation 
+(10 pts) 
+	
+Live: create agent → assign MCP → embed → task → agents collaborate on procurement workflow 
+	
+Shows agent creation and basic chat query 
+	
+Static screenshots; no live execution 
+
+
+Creativity & Innovation & Business  
+(30 pts) 
+	
+Predictive acceptance modeling; live negotiation simulation; parallel multi-system retrieval; novel A2A patterns 
+	
+Nice dashboard UI; basic agent templates 
+	
+Standard CRUD app with LLM calls 
+10. AI Utilization: What We're Looking For 
+During Development (Process) 
+Teams must document their AI usage throughout the contest: 
+AI used to scaffold the agent runtime engine 
+AI used to generate MCP tool integration code 
+AI used to design real-time WebSocket layer 
+Which parts AI generated vs. hand-written 
+Time saved estimation per component 
+Within the Product (Output) 
+The platform itself manages AI agents (meta-level AI): 
+Multi-model LLM integration (Claude) 
+MCP protocol (tools, resources, prompts) 
+A2A agent-to-agent communication 
+Memory management (RAG, conversation buffer, summary) 
+Agent monitoring & ticket execution 
+Required Deliverable: Each team submits an "AI Usage Log" alongside their code: a brief document describing their AI-assisted development workflow. 
+11. Assessment Framework & Judging Process 
+Phase 1: Code Review & AI Mastery Assessment: review code quality, architecture, and evaluate AI usage log and AI workflow. 
+Phase 2: Live Demo & Presentation: 10-15 mins for present, demo, and Q&A per team. 
+Phase 3: Creativity Bonus: Panel awards innovation points. Peer voting from other teams (optional). 
+12. Judging Panel & Conflict of Interest 
+Recommended Panel (3-5 judges) 
+Product / Business Stakeholder — Assesses practical value & creativity 
+AI / ML Specialist — Evaluates AI integration sophistication 
+External Guest — AI Judge  
+Fairness Rules 
+Ties broken by AI Utilization score, then Functionality 
+All scoring sheets are shared post-event for transparency 
+Deliverables per Team 
+Source code (Git repo) 
+AI Usage Log (doc/PDF) 
+Slide deck (max 7 slides) 
+Live demo URL 
+13. Prize Distribution & Ceremony 
+Place 
+	
+Prize 
+	
+Extras 
+
+
+1st Place 
+	
+10k-50k 
+	
+Certificates + Trophy 
+
+
+2nd Place 
+	
+10k-50k 
+	
+Certificates 
+
+
+3rd Place 
+	
+10k-50k 
+	
+Certificates 
+14. Contest Rules & Guidelines 
+Allowed 
+Any AI coding assistant or chatbot (refer Section 2) 
+Any programming language / framework 
+Open-source libraries & packages 
+Pre-built project templates (boilerplate only) 
+AI-generated code (must understand & explain) 
+Not Allowed 
+Pre-written application code 
+Copy-pasting from previous projects 
+Communication between teams during contest 
+Hiring external help 
+Submitting code, you cannot explain 
+Plagiarism from other teams 
+Golden Rule: Every team member must be able to explain any piece of code in their submission. AI is a tool, not a black box. 
+15. Post-Event Success Metrics 
+Quantitative Metrics 
+Participation rate: target 20-25 engineers 
+Lines of code produced: per team (with AI vs. estimated without) 
+AI tools adopted: # of distinct tools used across all teams 
+Feature completion rate: % of Tier 1+2 features completed 
+NPS score: from participant survey (≥8/10) 
+Qualitative Metrics 
+Knowledge sharing: learnings documented and shared 
+AI best practices: identified for daily work 
+Cross-team bonding: and collaboration 
+Follow-up projects: ideas that become real initiatives 
+Skill uplift: self-reported confidence with AI tools  
+FAQs 
+ 
+What are acceptable AI frameworks?  
+All AI frameworks are acceptable, but you should not rely on a fully built, end-to-end application. What matters most is that you truly understand the framework you choose, embracing the principle: “You build it, you understand it, and you control it. 
+What are the main core principles of this Hackathon?  
+Every team participating in this hackathon will act as an ambassador, helping to spread the Agentic AI mindset within their own teams. 
+What are the requirements for the infrastructure?  
+All teams are free to use either Azure, AWS, or a hybrid of both, depending on what best fits their solution. There is no restriction on cloud providers, but cost-awareness and proper resource management are required. 
+Every resource created during the hackathon must follow a standard tagging policy to ensure visibility, governance, and cost tracking. At minimum, the following tags are required: 
+``` 
+owner=team1 (or your respective team's name)   
+product=hackathon  
+costcenter=Mohalihub 
+``` 
+Should infrastructure be defined as code (IaC)? 
+Yes. All infrastructure must be defined and managed using Infrastructure as Code (IaC) to ensure reproducibility, consistency, and easier collaboration across teams. 
+Teams are encouraged to use tools such as Terraform, AWS CloudFormation, Azure Bicep, or ARM templates, depending on their preferred cloud platform. (Remember to install azure cli, aws cli or saml2aws to authenticate beforehand) 
+Infrastructure should be version-controlled in a Git repository, and any changes must be applied through code rather than manual configuration in the cloud console. 
+This ensures that: 
+Environments can be easily recreated or scaled when needed  
+Changes are auditable and traceable  
+Teams can collaborate efficiently without configuration drift  
+Solutions can be demonstrated and validated reliably by judges  

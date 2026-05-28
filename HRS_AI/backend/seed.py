@@ -36,6 +36,10 @@ from app.models.db import (
     AgentStatus,
     AuditLog,
     Base,
+    CollaborationMessage,
+    CollaborationMessageRole,
+    CollaborationSession,
+    CollaborationSessionStatus,
     Department,
     DeptKPI,
     ExecutionStatus,
@@ -708,6 +712,116 @@ DEPARTMENTS = [
         ],
     },
     {
+        "name": "Procurement & Sourcing",
+        "description": "Corporate hotel negotiation, supplier management, and procurement intelligence",
+        "color": "#f97316",
+        "icon": "ShoppingCart",
+        "kpis": [
+            {"name": "Contract Savings Rate", "value": 12.4, "target": 15.0, "unit": "%", "trend": "up"},
+            {"name": "Supplier On-Time Delivery", "value": 91.2, "target": 95.0, "unit": "%", "trend": "up"},
+            {"name": "Compliance Rate", "value": 96.8, "target": 99.0, "unit": "%", "trend": "stable"},
+            {"name": "RFP Cycle Time", "value": 18.0, "target": 14.0, "unit": "days", "trend": "down"},
+        ],
+        "personas": [
+            {
+                "name": "Category Manager",
+                "slug": "category-manager",
+                "description": "Leads strategic sourcing and negotiation for corporate hotel and travel categories across EMEA, APAC, and Americas.",
+                "responsibilities": [
+                    "Develop and execute category strategies for hotel and travel spend",
+                    "Lead supplier negotiations and contract renewals",
+                    "Analyse market pricing and rate benchmarking",
+                    "Manage preferred supplier programmes",
+                    "Drive cost savings and value delivery targets",
+                    "Monitor contract compliance and leakage",
+                    "Produce executive procurement reports",
+                    "Coordinate cross-functional stakeholder alignment",
+                ],
+                "data_access": [
+                    "Contract management system",
+                    "Supplier performance database",
+                    "Market rate benchmarking platform",
+                    "Spend analytics dashboard",
+                    "Jira procurement project tracker",
+                ],
+                "processes": [
+                    "Annual category planning cycle",
+                    "RFP design and execution",
+                    "Contract negotiation and award",
+                    "Supplier performance review (QBR)",
+                    "Savings validation and reporting",
+                ],
+                "avatar_initials": "CM",
+                "avatar_color": "#f97316",
+                "deployed": True,
+            },
+            {
+                "name": "Supplier Relations Manager",
+                "slug": "supplier-relations-manager",
+                "description": "Manages strategic supplier relationships, onboarding, performance tracking, and escalation resolution.",
+                "responsibilities": [
+                    "Maintain relationships with tier-1 hotel chain accounts",
+                    "Coordinate supplier onboarding and due diligence",
+                    "Track and report supplier KPIs and SLAs",
+                    "Resolve escalations and service failures",
+                    "Facilitate quarterly business reviews with suppliers",
+                    "Manage supplier risk assessments and mitigation plans",
+                    "Ensure supplier sustainability and ESG compliance",
+                    "Support contract renegotiation with performance data",
+                ],
+                "data_access": [
+                    "Supplier onboarding portal",
+                    "SLA and KPI tracking system",
+                    "Escalation and issue management log",
+                    "ESG compliance database",
+                    "Supplier contract repository",
+                ],
+                "processes": [
+                    "Supplier onboarding and qualification",
+                    "Quarterly business review facilitation",
+                    "SLA monitoring and reporting",
+                    "Escalation management",
+                    "Risk and compliance assessment",
+                ],
+                "avatar_initials": "SR",
+                "avatar_color": "#fb923c",
+                "deployed": True,
+            },
+            {
+                "name": "Procurement Compliance Officer",
+                "slug": "procurement-compliance-officer",
+                "description": "Ensures all procurement activities adhere to internal policies, regulatory requirements, and ethical sourcing standards.",
+                "responsibilities": [
+                    "Review contracts for policy and regulatory compliance",
+                    "Conduct supplier due diligence and risk screening",
+                    "Monitor procurement spend for policy violations",
+                    "Maintain audit trail for all sourcing decisions",
+                    "Train procurement staff on compliance requirements",
+                    "Manage anti-bribery and anti-corruption controls",
+                    "Produce compliance reports for legal and board",
+                    "Coordinate internal and external audits",
+                ],
+                "data_access": [
+                    "Compliance monitoring platform",
+                    "Supplier risk screening database",
+                    "Audit log and documentation repository",
+                    "Policy and regulatory reference library",
+                    "Training completion records",
+                ],
+                "processes": [
+                    "Compliance review and sign-off process",
+                    "Supplier due diligence workflow",
+                    "Policy breach investigation",
+                    "Audit preparation and response",
+                    "Regulatory change management",
+                ],
+                "avatar_initials": "CO",
+                "avatar_color": "#fdba74",
+                "deployed": False,
+            },
+        ],
+    },
+    {
         "name": "Leadership",
         "description": "Executive leadership, strategy, and organisational governance",
         "color": "#ef4444",
@@ -882,6 +996,95 @@ ACTION_TEMPLATES = [
             "velocity": {"type": "number"},
         },
         "prompt": "You are an experienced scrum master and agile coach. Facilitate a blameless sprint retrospective. Structure the output as: What went well (celebrate), What to improve (opportunities), Action items (concrete, assigned, time-boxed), and Team health indicators.",
+        "is_global": True,
+    },
+    # ── Procurement action templates ──────────────────────────────────────
+    {
+        "name": "Generate Hotel Negotiation Brief",
+        "description": "Produces a structured negotiation brief for corporate hotel rate renewals, including benchmarks, levers, and talking points.",
+        "category": "procurement",
+        "input_schema": {
+            "hotel_chain": {"type": "string", "description": "e.g. Marriott, Hilton, IHG"},
+            "region": {"type": "string", "description": "e.g. EMEA, APAC, Americas"},
+            "current_rate": {"type": "number", "description": "Current negotiated rate (USD/night)"},
+            "room_nights_pa": {"type": "integer", "description": "Annual room nights volume"},
+            "contract_expiry": {"type": "string", "description": "Contract expiry date"},
+        },
+        "prompt": (
+            "You are a senior corporate travel and hotel procurement specialist. "
+            "Generate a comprehensive negotiation brief for a hotel rate renewal. "
+            "Include: Executive Summary, Market Intelligence & Benchmarks, Current Relationship Assessment, "
+            "Negotiation Objectives (primary and fallback positions), Key Levers (volume commitments, payment terms, amenities), "
+            "Talking Points for each lever, BATNA (best alternative), Risk Mitigation, and Recommended Next Steps. "
+            "Be specific, quantitative, and commercially rigorous."
+        ),
+        "is_global": True,
+    },
+    {
+        "name": "Supplier Compliance Check",
+        "description": "Runs a structured compliance and risk assessment against a supplier or proposed contract.",
+        "category": "procurement",
+        "input_schema": {
+            "supplier_name": {"type": "string"},
+            "contract_value_usd": {"type": "number"},
+            "category": {"type": "string", "description": "e.g. hotel, logistics, IT services"},
+            "regions": {"type": "string", "description": "Countries or regions of operation"},
+        },
+        "prompt": (
+            "You are a procurement compliance and risk management expert. "
+            "Conduct a structured supplier compliance and risk assessment. "
+            "Cover: (1) Regulatory Compliance checklist (GDPR, anti-bribery, sanctions screening), "
+            "(2) Financial Stability indicators, (3) ESG & Sustainability scoring, "
+            "(4) Operational Risk factors, (5) Reputational Risk signals, "
+            "(6) Overall Risk Rating (Low/Medium/High/Critical) with justification, "
+            "(7) Required due diligence actions before contract award, "
+            "(8) Ongoing monitoring recommendations. Output as structured Markdown with a summary table."
+        ),
+        "is_global": True,
+    },
+    {
+        "name": "Generate Negotiation Talking Points",
+        "description": "Creates targeted talking points and counter-arguments for a specific supplier negotiation session.",
+        "category": "procurement",
+        "input_schema": {
+            "supplier_name": {"type": "string"},
+            "negotiation_topic": {"type": "string", "description": "e.g. rate increase, SLA terms, payment terms"},
+            "supplier_position": {"type": "string", "description": "What the supplier is asking for"},
+            "our_position": {"type": "string", "description": "What we want to achieve"},
+        },
+        "prompt": (
+            "You are an expert negotiation strategist specialising in B2B procurement. "
+            "Generate a structured set of negotiation talking points for the upcoming session. "
+            "Structure as: (1) Opening position and framing, (2) Key arguments (3-5 strong points with evidence), "
+            "(3) Anticipated supplier counter-arguments and our rebuttals, "
+            "(4) Concession strategy (what we can offer vs. what we will not move on), "
+            "(5) Anchor points and psychological tactics to use, "
+            "(6) Closing and next-steps language. Be assertive but collaborative in tone."
+        ),
+        "is_global": True,
+    },
+    {
+        "name": "Hotel Rate Benchmarking Analysis",
+        "description": "Analyses corporate hotel rates against market benchmarks and identifies savings opportunities.",
+        "category": "procurement",
+        "input_schema": {
+            "city": {"type": "string"},
+            "current_rate_usd": {"type": "number"},
+            "star_rating": {"type": "integer", "description": "Hotel star rating (3-5)"},
+            "annual_room_nights": {"type": "integer"},
+            "contract_term_years": {"type": "number"},
+        },
+        "prompt": (
+            "You are a corporate travel procurement analyst with deep knowledge of hotel rate benchmarking. "
+            "Produce a detailed rate benchmarking analysis for the given city and hotel tier. "
+            "Include: (1) Market Rate Assessment (BAR rates, corporate average, ADR trends), "
+            "(2) Our Rate vs. Market comparison with percentage gap, "
+            "(3) Volume-based discount opportunity modelling, "
+            "(4) Competitive alternatives (3 comparable properties with estimated rates), "
+            "(5) Savings potential calculation (annual), "
+            "(6) Recommended negotiation target rate with justification, "
+            "(7) Market outlook for next 12 months. Format with clear tables and numbers."
+        ),
         "is_global": True,
     },
 ]
@@ -1267,6 +1470,82 @@ def main():
             )
             session.add(doc)
 
+        # ── Completed collaboration session (demo) ──────────────────────────
+        print("[Seed] Creating demo collaboration session...")
+        session.flush()  # ensure admin user id is available if needed
+        demo_session = CollaborationSession(
+            title="EMEA Hotel Contract Q3 2026",
+            problem=(
+                "Analyse our Q3 2026 EMEA hotel contract renewals. Review current rates, identify "
+                "negotiation opportunities, check compliance requirements, and generate a negotiation "
+                "brief with talking points for our top 5 hotel chains."
+            ),
+            status=CollaborationSessionStatus.COMPLETED,
+            synthesis_output=(
+                "# EMEA Hotel Contract Q3 2026 — Synthesis Report\n\n"
+                "## Executive Summary\n"
+                "Analysis of Q3 2026 EMEA hotel contract renewals across 5 major chains reveals a **12.4% average "
+                "overpayment vs. market benchmarks**, representing an annual savings opportunity of **€2.1M**. "
+                "Three chains (Marriott, IHG, Accor) are renewal-ready; Hilton and Radisson require compliance "
+                "review before renegotiation.\n\n"
+                "## Key Findings\n\n"
+                "### 1. Rate Benchmarking (Category Manager)\n"
+                "| Chain | Current Rate (€/night) | Market Benchmark | Gap | Priority |\n"
+                "|-------|------------------------|-----------------|-----|----------|\n"
+                "| Marriott | €185 | €162 | +14.2% | High |\n"
+                "| Hilton | €172 | €158 | +8.9% | High |\n"
+                "| IHG | €148 | €139 | +6.5% | Medium |\n"
+                "| Accor | €134 | €128 | +4.7% | Medium |\n"
+                "| Radisson | €121 | €115 | +5.2% | Low |\n\n"
+                "Combined volume: **48,200 room nights p.a.** — qualifies for Tier 1 volume discounts across all chains.\n\n"
+                "### 2. Supplier Compliance Assessment (Procurement Compliance Officer)\n"
+                "- **Marriott, IHG, Accor**: GDPR compliant, ESG certificates current, sanctions clear ✅\n"
+                "- **Hilton**: Data processing addendum expired March 2026 — must be renewed before contract award ⚠️\n"
+                "- **Radisson**: Missing ISO 14001 certificate for 2 DACH properties — request within 30 days ⚠️\n"
+                "- All 5 chains passed anti-bribery screening and financial stability checks.\n\n"
+                "### 3. Negotiation Strategy (Supplier Relations Manager)\n"
+                "**Primary objectives**: 10–15% rate reduction across all chains; add breakfast inclusion for stays 3+ nights.\n\n"
+                "**Key negotiation levers**:\n"
+                "1. Volume commitment guarantee (48K room nights → request 15% discount)\n"
+                "2. Extended payment terms (30 → 45 days) in exchange for rate lock\n"
+                "3. Green stay programme participation (ESG metric for HRS sustainability report)\n"
+                "4. Last-room availability for Tier 1 destinations\n\n"
+                "## Recommended Actions\n"
+                "1. **Immediate (Week 1–2)**: Send RFP to Marriott, IHG, Accor with volume commitment letter\n"
+                "2. **Compliance (Week 1)**: Chase Hilton DPA renewal and Radisson ISO certificate\n"
+                "3. **Negotiation Kickoff (Week 3)**: Schedule negotiation sessions — use talking points attached\n"
+                "4. **Target Close**: All contracts signed by 15 August 2026\n\n"
+                "## Projected Outcome\n"
+                "- **Conservative savings**: €1.4M p.a. (8% blended reduction)\n"
+                "- **Target savings**: €2.1M p.a. (12.4% blended reduction)\n"
+                "- **Stretch savings**: €2.6M p.a. (15% + breakfast inclusion value)\n\n"
+                "*Generated by HRS AI Collaboration Platform — Category Manager, Supplier Relations Manager, "
+                "Procurement Compliance Officer agents*"
+            ),
+        )
+        session.add(demo_session)
+        session.flush()
+
+        # Add a couple of synthetic messages for the demo session
+        demo_msgs = [
+            CollaborationMessage(
+                session_id=demo_session.id,
+                role=CollaborationMessageRole.USER,
+                content=(
+                    "Analyse our Q3 2026 EMEA hotel contract renewals. Review current rates, identify "
+                    "negotiation opportunities, check compliance requirements, and generate a negotiation "
+                    "brief with talking points for our top 5 hotel chains."
+                ),
+            ),
+            CollaborationMessage(
+                session_id=demo_session.id,
+                role=CollaborationMessageRole.ASSISTANT,
+                content="Starting multi-agent analysis: Category Manager, Supplier Relations Manager, and Procurement Compliance Officer are collaborating on your EMEA hotel contract review.",
+            ),
+        ]
+        for msg in demo_msgs:
+            session.add(msg)
+
         session.commit()
         print("\n[Seed] Database seeded successfully!")
         print(f"  - 1 organisation")
@@ -1277,6 +1556,7 @@ def main():
         print(f"  - 1 admin user ({admin_email} / {admin_password})")
         print(f"  - {len(ACTION_TEMPLATES)} action templates")
         print(f"  - {len(PROCESS_DOCUMENTS)} process documents")
+        print(f"  - 1 demo collaboration session (EMEA Hotel Contract Q3 2026)")
         print("\n[Seed] Run: uvicorn main:app --reload --port 8000")
 
     except Exception as exc:
