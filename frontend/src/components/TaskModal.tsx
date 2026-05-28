@@ -12,14 +12,25 @@ import {
   createTaskLink,
   deleteTaskLink,
   searchUsers,
+  fetchLabels,
+  attachLabel,
+  detachLabel,
 } from "../api/client";
 import { AttachmentZone } from "./AttachmentZone";
 import { AIPanel } from "./AIPanel";
 import { Field } from "./Field";
+import { LabelPicker } from "./LabelPicker";
 import { TypeIcon } from "./TypeIcon";
 import { labelStatus } from "../utils/labelStatus";
 import * as cx from "../styles/classes";
-import type { Comment, SSETaskEvent, Task, TaskLink, User } from "../types";
+import type {
+  Comment,
+  Label,
+  SSETaskEvent,
+  Task,
+  TaskLink,
+  User,
+} from "../types";
 
 function timeAgo(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -92,6 +103,12 @@ export function TaskModal({
   );
   const [error, setError] = useState("");
   const [showAIPanel, setShowAIPanel] = useState(false);
+
+  // Labels state
+  const [allLabels, setAllLabels] = useState<Label[]>([]);
+  const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>(
+    task?.labels?.map((l) => l.id) ?? [],
+  );
 
   // AI triage suggestion state
   const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
@@ -176,7 +193,17 @@ export function TaskModal({
     setAiSuggestion(null);
     setAiSuggestionDismissed(false);
     aiSuggestionFetchedRef.current = false;
+    // Reset label selections
+    setSelectedLabelIds(task?.labels?.map((l) => l.id) ?? []);
   }, [task?.id]);
+
+  // Load project labels whenever the modal is shown
+  useEffect(() => {
+    if (!token) return;
+    fetchLabels(projectId, token)
+      .then((data) => setAllLabels(data.labels))
+      .catch(() => setAllLabels([]));
+  }, [projectId, token]);
 
   // Load comments + subtasks + parent when a task is opened
   useEffect(() => {
@@ -342,6 +369,20 @@ export function TaskModal({
             token,
             body,
           });
+
+      // Sync labels: attach newly selected, detach removed ones
+      const prevIds = task?.labels?.map((l) => l.id) ?? [];
+      const toAttach = selectedLabelIds.filter((id) => !prevIds.includes(id));
+      const toDetach = prevIds.filter((id) => !selectedLabelIds.includes(id));
+      await Promise.all([
+        ...toAttach.map((id) =>
+          attachLabel(projectId, saved.id, id, token ?? ""),
+        ),
+        ...toDetach.map((id) =>
+          detachLabel(projectId, saved.id, id, token ?? ""),
+        ),
+      ]);
+
       onSaved(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save task");
@@ -867,6 +908,16 @@ export function TaskModal({
                 />
               </Field>
             </div>
+            <Field label="Labels">
+              <LabelPicker
+                allLabels={allLabels}
+                selectedIds={selectedLabelIds}
+                onAttach={(id) => setSelectedLabelIds((prev) => [...prev, id])}
+                onDetach={(id) =>
+                  setSelectedLabelIds((prev) => prev.filter((x) => x !== id))
+                }
+              />
+            </Field>
             <button className={cx.btn} disabled={saving}>
               {saving ? "Saving..." : "Save task"}
             </button>

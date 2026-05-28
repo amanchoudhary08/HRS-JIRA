@@ -1,4 +1,4 @@
-import React, { FormEvent, useState } from "react";
+import React, { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Field } from "../components/Field";
@@ -15,6 +15,12 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!error) return;
+    const timeout = window.setTimeout(() => setError(""), 2000);
+    return () => window.clearTimeout(timeout);
+  }, [error]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -65,7 +71,11 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
           {error && <div className={cx.errorBox}>{error}</div>}
           {mode === "register" && (
             <Field label="Name">
-              <input className={cx.fieldInput} value={name} onChange={(e) => setName(e.target.value)} />
+              <input
+                className={cx.fieldInput}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
             </Field>
           )}
           <Field label="Email or Employee ID">

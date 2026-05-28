@@ -4,6 +4,7 @@ export async function request<T>(
   path: string,
   options: { method?: string; token?: string | null; body?: unknown } = {},
 ): Promise<T> {
+  const isAuthEndpoint = path.startsWith("/auth/");
   const res = await fetch(`${API_URL}${path}`, {
     method: options.method ?? "GET",
     headers: {
@@ -14,10 +15,12 @@ export async function request<T>(
   });
   if (res.status === 204) return undefined as T;
   if (res.status === 401) {
-    localStorage.removeItem("taskflow_token");
-    localStorage.removeItem("taskflow_user");
-    window.location.href = "/login";
-    throw new Error("Session expired. Please log in again.");
+    if (!isAuthEndpoint) {
+      localStorage.removeItem("taskflow_token");
+      localStorage.removeItem("taskflow_user");
+      window.location.href = "/login";
+      throw new Error("Session expired. Please log in again.");
+    }
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

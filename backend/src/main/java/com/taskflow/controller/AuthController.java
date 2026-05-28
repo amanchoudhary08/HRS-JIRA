@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 @RestController
 public class AuthController {
@@ -91,8 +92,13 @@ public class AuthController {
         if (q.isBlank()) {
             return ResponseEntity.ok(Map.of("users", List.of()));
         }
-        List<UserDto> users = userRepo.findByNameContainingIgnoreCase(q.trim())
-                .stream()
+        String term = q.trim();
+        java.util.Set<java.util.UUID> seen = new java.util.LinkedHashSet<>();
+        List<UserDto> users = Stream.concat(
+                userRepo.findByNameContainingIgnoreCase(term).stream(),
+                userRepo.findByEmailContainingIgnoreCase(term).stream()
+        )
+                .filter(u -> seen.add(u.getId()))
                 .limit(10)
                 .map(UserDto::from)
                 .toList();
